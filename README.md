@@ -83,11 +83,26 @@ schematic, ST77922 specification and example code.
 Each is a momentary switch from the pin to GND; internal pull-ups, no resistors.
 Touch keeps working alongside them.
 
+On the **CYD**:
+
 | Button | Pin | Where |
 |---|---|---|
 | Left flipper | IO22 | "Extended IO" header, silkscreened P3 (`GND IO35 IO22 IO21`): 4-pin 1.25 mm per Sunton's spec; JST **GH** fits, PicoBlade doesn't |
 | Right flipper | IO21 | P3 header |
 | Launch | GPIO 0 | the board's **BOOT** button: hold to charge, release to fire |
+
+On the **ES3C35P** the buttons go on the serial-port header (1.25 mm 4-pin; the
+board ships with a 1.25 mm to 2.54 mm adapter cable):
+
+| Button | Pin | Where |
+|---|---|---|
+| Left flipper | IO43 | serial header pin 3 (TXD0) |
+| Right flipper | IO44 | serial header pin 4 (RXD0) |
+| Launch | GPIO 0 | the board's **BOOT** button |
+| (common) | GND | serial header pin 1 (pin 2 is power: leave it alone) |
+
+Don't hold the left button while the ES3C35P resets: the ROM prints its boot
+log on IO43.
 
 Any button press also starts a game or leaves the demo. Don't hold BOOT while
 the board resets (it enters flash mode). Pins are set at the top of `main.cpp`.

@@ -15,11 +15,18 @@
 // CTP_INT to pin 37, which the same table's pin column maps to IO48 and IO47,
 // and the vendor's touch library agrees: reset 48, interrupt 47.
 //
-// Flipper buttons: per the IO table, only IO38/39 (the I2C bus, in use here),
-// IO43/44 (the UART0 header) and IO45/46 (free, but not brought out) are
-// usable as plain IO. IO43/44 would do, since this build's console is native
-// USB; until something is wired there the flippers are touch-only, and with
-// real multi-touch a thumb on each half of the screen holds each flipper.
+// Flipper buttons go on the serial-port header (the vendor spec's "1.25mm
+// 4P socket", P2 on the schematic): pin 1 GND, pin 3 TXD0 = IO43 (left),
+// pin 4 RXD0 = IO44 (right), each through a 100R series resistor on the
+// board. Pin 2 is power; leave it alone. This build's console is native USB,
+// so UART0 is idle and the IO table allows those two as plain IO. Each button
+// is a momentary switch from its pin to GND; internal pull-ups, so unwired
+// pins read "not pressed". Touch keeps working alongside the buttons.
+//   - The ROM prints its boot log on IO43, so don't hold the left button
+//     while the board resets (the 100R limits the current if you do).
+//   - IO45/46 on the expansion header are free too, but they're strapping
+//     pins (IO45 picks the flash voltage at reset), so a pull-up there could
+//     stop the board booting.
 
 #include <Arduino.h>
 #if defined(BOARD_ES3C35P)
@@ -48,6 +55,8 @@ constexpr int16_t TONE_AMP = 2200;  // square wave amplitude (of 32767)
 constexpr int CODEC_VOLUME = 70;    // 0..100
 
 constexpr int PIN_LED = 40;
+constexpr int PIN_BTN_LEFT = 43;   // serial header pin 3 (TXD0)
+constexpr int PIN_BTN_RIGHT = 44;  // serial header pin 4 (RXD0)
 constexpr int PIN_BTN_LAUNCH = 0;  // BOOT
 
 uint8_t maxPoints = 0;
@@ -174,6 +183,8 @@ const bool MULTITOUCH = true;
 const int ALIGN_X = 4;  // ST77922 CASET: XS and width must be multiples of 4
 
 bool init() {
+  pinMode(PIN_BTN_LEFT, INPUT_PULLUP);  // takes IO43/44 back from UART0
+  pinMode(PIN_BTN_RIGHT, INPUT_PULLUP);
   pinMode(PIN_BTN_LAUNCH, INPUT_PULLUP);
   pixel.begin();
   pixel.setBrightness(60);
@@ -225,8 +236,8 @@ int readTouch(Touch* pts) {
   return heldN;
 }
 
-bool btnLeft() { return false; }
-bool btnRight() { return false; }
+bool btnLeft() { return digitalRead(PIN_BTN_LEFT) == LOW; }
+bool btnRight() { return digitalRead(PIN_BTN_RIGHT) == LOW; }
 bool btnLaunch() { return digitalRead(PIN_BTN_LAUNCH) == LOW; }
 
 void tone(uint16_t hz) { toneHz = hz; }
