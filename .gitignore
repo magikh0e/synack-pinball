@@ -1,0 +1,5 @@
+.pio/
+.vscode/
+host/sim
+host/*.ppm
+host/*.png
