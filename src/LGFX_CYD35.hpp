@@ -1,15 +1,18 @@
 // LovyanGFX board config for the Sunton ESP32-3248S035R (3.5" CYD).
 //
-// Pins are the ones measured on real hardware in the pueo + sprout projects
-// (docs/pueo/build-guide.md + the TFT_eSPI "User_Setup cyd.h"):
+// Sunton's own document, "3.5 inch ESP32 module ESP32-3248S035R/C" (Shenzhen
+// Jingcai Intelligent), gives the panel - ST7796, 320x480, resistive touch on
+// the R variant - and names the connectors, but publishes no GPIO map. So the
+// pins below are the ones verified on this board itself:
 //
 //   Display ST7796 on HSPI:  SCLK 14  MOSI 13  MISO 12  CS 15  DC 2  RST -1
 //   Backlight:               GPIO 27  (active HIGH)  <-- NOT 21
 //   Touch XPT2046:           CS 33, shares the display SPI bus
 //   Colour order:            BGR, inversion OFF
 //
-// Everything else on this board (RGB LED 4/16/17, LDR 34, speaker 26) is
-// plain GPIO and is driven from main.cpp, not here.
+// Everything else (RGB LED 4/16/17, speaker 26, buttons) is plain GPIO and
+// lives in board_cyd.cpp. Sunton's document lists a light sensor; this unit
+// has none on GPIO 34.
 
 #pragma once
 #define LGFX_USE_V1

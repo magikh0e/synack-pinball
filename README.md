@@ -43,7 +43,7 @@ thumb on each side lands in the middle zone and fires both flippers.
 - Pop bumpers 100, slingshots 10. The high score is kept in NVS.
 
 **Attract mode:** after 15 s idle on the title or game-over screen the table
-plays itself (silently, never touching the high score) with **DEMO · TAP TO
+plays itself (silently, never touching the high score) with **DEMO Â· TAP TO
 PLAY** in the top bar. Any tap starts a real game; a demo returns to the title
 when it ends or after 90 s.
 
@@ -69,6 +69,11 @@ python host/shot.py shot.png --reset --pre bm --wait 8   # real screenshot off t
   quad-SPI driver and the vendor's ES8311 codec driver. The ST77922 only
   accepts windows whose start column and width are multiples of 4, so dirty
   rects are widened to match (`board::ALIGN_X`).
+
+Hardware references are the manufacturers' own: Sunton's *3.5 inch ESP32 module
+ESP32-3248S035R/C* (no GPIO map, so the CYD pins were verified on the board),
+and LCDwiki's ES3C35P pack (`lcdwiki.com/res/ES3C35P/`): IO allocation table,
+schematic, ST77922 specification and example code.
 - `host/sim.cpp`: PC test harness (`sh host/run.sh`, needs Docker). It renders
   the table to PPM, sweeps plunger power and flipper shots, soaks 300 balls
   with a bot, and checks that partial redraws match a full redraw pixel for pixel.
@@ -80,7 +85,7 @@ Touch keeps working alongside them.
 
 | Button | Pin | Where |
 |---|---|---|
-| Left flipper | IO22 | P3 header (`GND IO35 IO22 IO21`, JST **GH** 1.25 mm, not PicoBlade) |
+| Left flipper | IO22 | "Extended IO" header, silkscreened P3 (`GND IO35 IO22 IO21`): 4-pin 1.25 mm per Sunton's spec; JST **GH** fits, PicoBlade doesn't |
 | Right flipper | IO21 | P3 header |
 | Launch | GPIO 0 | the board's **BOOT** button: hold to charge, release to fire |
 

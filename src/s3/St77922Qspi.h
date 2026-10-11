@@ -1,4 +1,4 @@
-/* ST77922 over quad SPI, on the pinned core.
+/* ST77922 over quad SPI, on the Arduino 2.0.x core.
  *
  * Driver for the LCDwiki ES3C35P's 3.5" ESP32-S3 panel.
  *
@@ -33,8 +33,9 @@
 
 #include <stdint.h>
 
-/* From the vendor library's own header, and they agree with what the
- * bring-up found on the bench by probing. */
+/* From the vendor's ST77922 library header, and they match the vendor IO
+ * table (ESP32-S3_IO资源分配表.xlsx): QSPI D0-D3 on IO11/13/14/9, clock IO12,
+ * chip select IO10 (active low), backlight IO41. */
 #define ST77922_W      320
 #define ST77922_H      480
 #define ST77922_CS     10

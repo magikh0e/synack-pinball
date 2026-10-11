@@ -1,11 +1,25 @@
 // LCDwiki ES3C35P (ESP32-S3, 3.5" 320x480): ST77922 panel over quad SPI with
 // its own capacitive multi-touch at I2C 0x55, ES8311 codec + speaker amp,
-// WS2812 LED, BOOT button. Pins are from the vendor pack's pin table and the
-// panel bring-up notes in s3/St77922Qspi.h.
+// WS2812 LED, BOOT button.
 //
-// The board brings out no free GPIO for flipper buttons (IO38/39 are the I2C
-// bus, IO43/44 are UART0), so the flippers are touch-only: with real
-// multi-touch, a thumb on each half of the screen holds each flipper.
+// Sources, all from LCDwiki's ES3C35P documentation pack
+// (lcdwiki.com/res/ES3C35P/):
+//   ESP32-S3_IO资源分配表.xlsx   the IO allocation table - every pin used here
+//   ESP32-S3原理图.pdf           the schematic
+//   ST77922_SPEC_V1.2.pdf        panel controller (window rules: see main.cpp)
+//   Example_16_music             ES8311 setup and the I2S pins
+//   ST77922_TOUCH library        touch protocol (0x55, 16-bit registers)
+//
+// One conflict inside the pack: the IO table's description column swaps the
+// touch reset and interrupt. The schematic wires CTP_RST to module pin 36 and
+// CTP_INT to pin 37, which the same table's pin column maps to IO48 and IO47,
+// and the vendor's touch library agrees: reset 48, interrupt 47.
+//
+// Flipper buttons: per the IO table, only IO38/39 (the I2C bus, in use here),
+// IO43/44 (the UART0 header) and IO45/46 (free, but not brought out) are
+// usable as plain IO. IO43/44 would do, since this build's console is native
+// USB; until something is wired there the flippers are touch-only, and with
+// real multi-touch a thumb on each half of the screen holds each flipper.
 
 #include <Arduino.h>
 #if defined(BOARD_ES3C35P)
@@ -21,7 +35,7 @@ namespace {
 
 // ---- touch: inside the ST77922, 16-bit registers, polled (INT never moves)
 constexpr uint8_t TOUCH_ADDR = 0x55;
-constexpr int TOUCH_SDA = 38, TOUCH_SCL = 39, TOUCH_RST = 48;
+constexpr int TOUCH_SDA = 38, TOUCH_SCL = 39, TOUCH_RST = 48;  // INT is IO47, never read
 constexpr uint16_t R_STATUS = 0x0001, R_MAX_TOUCHES = 0x0009, R_TOUCH_INFO = 0x0010,
                    R_POINT0 = 0x0014;
 constexpr uint8_t TOUCH_INFO_READY = 0x08, POINT_VALID = 0x80;

@@ -14,7 +14,7 @@
  *
  *   the first chunk after a window is set also uses 0x3C rather than 0x2C.
  *   The vendor does this and the panel accepts it. Changing it to the
- *   "correct" command is the sort of improvement that costs an evening.
+ *   "correct" command is not worth the risk.
  */
 #include "St77922Qspi.h"
 
@@ -221,20 +221,8 @@ void pushFrame(const uint16_t *px) {
     }
     t.base.tx_buffer = p;
     t.base.length = n * 16;
-    /* Polling, as the vendor does it, and left alone on purpose.
-     *
-     * This was briefly changed to spi_device_transmit on the theory that
-     * busy-waiting ~30 ms of every 40 ms frame on core 0 would starve
-     * that core's idle task and trip a watchdog. The theory was never
-     * tested and the change coincided with a boot loop, while polling had
-     * demonstrably pushed 2250 frames without complaint. The transmit
-     * path also wants DMA-capable memory, and this framebuffer lives in
-     * PSRAM, which is a difference between the two calls that the theory
-     * did not account for.
-     *
-     * If idle-task starvation ever does show up, the fix is a longer
-     * frame period or partial updates, not a transfer call swapped on a
-     * hunch. */
+    /* Polling, as the vendor's driver does it. A full frame at 80 MHz
+     * quad is ~8 ms; the table's dirty rects are far smaller. */
     spi_device_polling_transmit(s_dev, (spi_transaction_t *)&t);
     p += n;
     left -= n;
