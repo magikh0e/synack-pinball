@@ -71,7 +71,7 @@ void drawWorld(G& g, const Game& s) {
   for (int i = 0; i < 3; i++) {
     float cx = laneCx(i);
     if (!g.vis(cx - 12, 96, cx + 12, 118)) continue;
-    bool lit = s.lane[i];
+    bool lit = s.state != PLAY ? s.showLamp(i) : s.lane[i];
     g.disc(cx, 107, 8, lit ? AMBER : AMBER_DIM);
     if (!lit) g.disc(cx, 107, 6, BG);
     g.text(laneTxt[i], cx, 108, D_MC, F_SMALL, lit ? BG : AMBER_MID);
@@ -80,7 +80,9 @@ void drawWorld(G& g, const Game& s) {
   // spinner lane arrow lamp (magenta while the spinner is worth 2x)
   if (g.vis(SPIN_X0, SPIN_Y + 6, SPIN_X1, SPIN_Y + 24)) {
     float cx = (OUTER_L + SPIN_GUIDE_X) * 0.5f, y = SPIN_Y + 9;
-    uint32_t c = !s.synArmed ? AMBER_DIM : (s.blinkOn ? MAG : MAG_DARK);  // blinks: 2x
+    uint32_t c = s.state != PLAY ? (s.showLamp(3) ? MAG : AMBER_DIM)
+                 : !s.synArmed       ? AMBER_DIM
+                                     : (s.blinkOn ? MAG : MAG_DARK);  // blinks: 2x
     g.tri(cx, y, cx - 6, y + 10, cx + 6, y + 10, c);
   }
 
@@ -92,14 +94,18 @@ void drawWorld(G& g, const Game& s) {
       g.hline(x0, APRON_Y, x1 - x0, WALL_GLOW);
     }
     int cy = APRON_Y + (SCR_H - APRON_Y) / 2;
-    bool sa = s.saveLit && s.state == PLAY && (!s.saveBlinking() || s.blinkOn);
+    // SHOOT AGAIN: an extra ball waiting (solid), or a ball save (blinking
+    // for its last moments)
+    bool sa = s.state != PLAY
+                  ? s.showLamp(5)
+                  : s.extraBalls > 0 || (s.saveLit && (!s.saveBlinking() || s.blinkOn));
     if (sa) g.rect(APRON_L0 + 1, cy - 7, APRON_L1 - APRON_L0 - 2, 15, AMBER);
     g.text("SHOOT AGAIN", (APRON_L0 + APRON_L1) / 2, cy + 1, D_MC, F_SMALL, sa ? BG : AMBER_DIM);
     static const char* mt[4] = {"2x", "3x", "4x", "5x"};
     int w = (APRON_R1 - APRON_R0 - 8) / 4;
     for (int k = 0; k < 4; k++) {
       int x = APRON_R0 + 4 + k * w;
-      bool on = s.state == PLAY && s.mult >= k + 2;
+      bool on = s.state != PLAY ? s.showLamp(6 + k) : s.mult >= k + 2;
       if (on) g.rect(x + 1, cy - 7, w - 2, 15, AMBER);
       g.text(mt[k], x + w / 2, cy + 1, D_MC, F_SMALL, on ? BG : AMBER_DIM);
     }
@@ -108,7 +114,7 @@ void drawWorld(G& g, const Game& s) {
   // kickback indicator: chevron in the left outlane
   if (g.vis(OUTER_L + 2, KICK_Y - 34, KICK_X, KICK_Y - 8)) {
     float cx = (OUTER_L + KICK_X) * 0.5f;
-    uint32_t c = s.kickback ? GREEN : GREEN_DIM;
+    uint32_t c = (s.state != PLAY ? s.showLamp(4) : s.kickback) ? GREEN : GREEN_DIM;
     for (int k = 0; k < 2; k++) {
       float y = KICK_Y - 28 + k * 9;
       g.tri(cx, y, cx - 5, y + 6, cx + 5, y + 6, c);
@@ -170,7 +176,13 @@ void drawWorld(G& g, const Game& s) {
     g.rect(BALL_HOME_X - 1, PLUNGER_Y + 4 + pull, 3, SCR_H - PLUNGER_Y, AMBER_DIM);
     if (s.charging && s.charge > 0) {
       int h = (int)(s.charge * 190);
-      g.rect(BALL_HOME_X - 1, BALL_HOME_Y - 10 - h, 3, h, s.charge > 0.85f ? MAG : AMBER);
+      bool inZone = s.skillArmed && s.charge >= s.skillLo && s.charge <= s.skillHi;
+      g.rect(BALL_HOME_X - 1, BALL_HOME_Y - 10 - h, 3, h, inZone ? WHITE : AMBER);
+    }
+    // skill-shot zone beside the meter
+    if (s.skillArmed && s.state == PLAY) {
+      int y0 = BALL_HOME_Y - 10 - (int)(s.skillHi * 190), y1 = BALL_HOME_Y - 10 - (int)(s.skillLo * 190);
+      g.rect(BALL_HOME_X + 3, y0, 3, y1 - y0, MAG);
     }
   }
 

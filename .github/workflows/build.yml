@@ -1,0 +1,43 @@
+name: build
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  firmware:
+    name: firmware (${{ matrix.env }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        env: [esp32-3248s035r, es3c35p]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - uses: actions/cache@v4
+        with:
+          path: |
+            ~/.platformio
+            ~/.cache/pip
+          key: pio-${{ matrix.env }}-${{ hashFiles('platformio.ini') }}
+      - run: pip install platformio
+      - run: pio run -e ${{ matrix.env }}
+
+  host-tests:
+    name: physics and rendering tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      # the same harness as host/run.sh: plunger and flipper sweeps, a
+      # 600-ball soak, multiball, bonus, skill shot, extra ball, rolling
+      # speed, the demo, and dirty-rect vs full-redraw consistency.
+      # It exits non-zero if any check fails.
+      - name: build
+        working-directory: host
+        run: g++ -O2 -std=c++17 -Wall -I../src sim.cpp -o sim
+      - name: run
+        working-directory: host
+        run: ./sim

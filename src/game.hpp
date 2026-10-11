@@ -54,6 +54,14 @@ constexpr uint32_t BONUS_RAMP = 1000, BONUS_LANE = 250, BONUS_TARGET = 250,
 constexpr float BONUS_STEP_S = 0.55f;   // per bonus line (fast-forward: 0.08)
 constexpr float BLINK_HZ = 3.0f;        // lamps that say "shoot here"
 constexpr float SAVE_WARN_S = 2.0f;     // SHOOT AGAIN blinks for its last 2 s
+// skill shot: release the plunger with the power inside a zone on the meter
+// (the zone moves each ball). Launches can't aim at the lanes on this table -
+// strong ones all orbit to the spinner - so the skill is in the timing.
+constexpr uint32_t SKILL_PTS = 5000;
+constexpr float SKILL_W = 0.12f;        // zone width, as a fraction of full power
+// attract light show: lamps chase around the table between games
+constexpr float SHOW_HZ = 8.0f;
+constexpr int SHOW_LAMPS = 10;          // S Y N, spinner arrow, kickback, SHOOT AGAIN, 2x-5x
 constexpr float DEMO_IDLE_S = 15.0f;  // idle on title / game over before the demo
 constexpr float DEMO_MAX_S = 90.0f;   // longest demo before returning to the title
 constexpr float MB_SAVE_S = 10.0f;    // multiball ball save
@@ -194,6 +202,7 @@ enum : uint32_t {
   EV_START = 1 << 12, EV_NUDGE = 1 << 13, EV_KICKBACK = 1 << 14,
   EV_SPIN = 1 << 15, EV_MULTIBALL = 1 << 16, EV_RAMP = 1 << 17,
   EV_BONUS_LINE = 1 << 18, EV_BONUS_TICK = 1 << 19, EV_FLIP_HIT = 1 << 20,
+  EV_SKILL = 1 << 21, EV_EXTRA = 1 << 22,
 };
 
 // ---------------------------------------------------------------- game
@@ -262,6 +271,19 @@ class Game {
   uint32_t nBumper = 0, nSling = 0, nTarget = 0, nLane = 0, nNudge = 0, nKick = 0, nSpin = 0, nMulti = 0, nRampIn = 0, nRamp = 0;
   float rampRideSum = 0, rampRideMax = 0;  // completed rides, seconds
   uint32_t nFlipHit = 0;
+  int gameSyns = 0, gameHandshakes = 0;  // this game, for extra-ball rules
+  uint32_t nSkill = 0, nExtra = 0;
+  // skill shot zone for the ball on the plunger
+  bool skillArmed = false;
+  float skillLo = 0, skillHi = 0;
+  // extra balls earned and not yet played (SHOOT AGAIN lit)
+  int extraBalls = 0;
+  int showKey = -1;  // attract light show: last state drawn
+  uint32_t rng = 0x2F6E2B1u;
+  float rnd() {
+    rng = rng * 1664525u + 1013904223u;
+    return (rng >> 8) / 16777216.0f;
+  }
   float flipHitT[2] = {-1, -1};  // last contact sound per flipper (game time)
 
   Game() { build(); resetFlippers(); }
@@ -363,6 +385,9 @@ class Game {
     bonusActive = false;
     resetBallCounts();
     score = 0;
+    gameSyns = gameHandshakes = 0;
+    extraBalls = 0;
+    rng ^= (uint32_t)(t * 1000.0f);  // a different skill zone each game
     ball = 1;
     mult = 1;
     memset(lane, 0, sizeof lane);
@@ -391,6 +416,10 @@ class Game {
     everLeftLane = false;
     charge = 0;
     charging = false;
+    skillArmed = true;
+    float c = 0.45f + rnd() * 0.35f;
+    skillLo = c - SKILL_W / 2;
+    skillHi = c + SKILL_W / 2;
     markBallAt(b.p);
     markPlunger();
   }
@@ -446,6 +475,7 @@ class Game {
     decay(targetFlash, 3, dt, [&](int i) { markTarget(i); });
 
     if (state != PLAY) {
+      updateShow();
       // "TAP TO START" appears once the game-over screen has been up a moment
       if (state == GAMEOVER && stateT >= 1.2f && stateT - dt < 1.2f)
         mark(PANEL_X, PANEL_Y, PANEL_X + PANEL_W, PANEL_Y + PANEL_H);
@@ -478,6 +508,15 @@ class Game {
       if (resting) {
         lb->v.y = -(PLUNGE_MIN + (PLUNGE_MAX - PLUNGE_MIN) * charge);
         events |= EV_LAUNCH;
+        if (skillArmed) {  // first launch of this ball only
+          skillArmed = false;
+          if (charge >= skillLo && charge <= skillHi) {
+            addScore(SKILL_PTS);
+            say("SKILL SHOT!", 1.8f);
+            events |= EV_SKILL;
+            nSkill++;
+          }
+        }
       }
       charge = 0;
       markPlunger();
@@ -546,6 +585,37 @@ class Game {
       if (live0[i]) markBallAt(p0[i]);
       if (balls[i].live) markBallAt(balls[i].p);
     }
+  }
+
+  // attract light show. newHigh: the game-over screen of a record score,
+  // where every lamp flashes instead
+  bool newHigh() const { return state == GAMEOVER && score > 0 && score >= hiscore; }
+  bool showLamp(int i) const {
+    if (newHigh()) return blinkOn;
+    int step = (int)(stateT * SHOW_HZ) % SHOW_LAMPS;
+    return i == step || i == (step + SHOW_LAMPS - 1) % SHOW_LAMPS;  // a lamp and its tail
+  }
+  PB_NOINLINE void updateShow() {
+    int key = newHigh() ? (blinkOn ? 100 : 101) : (int)(stateT * SHOW_HZ) % SHOW_LAMPS;
+    if (key == showKey) return;
+    showKey = key;
+    for (int i = 0; i < 3; i++) markLane(i);
+    markSpinner();
+    markKickback();
+    markApron();
+  }
+
+  // serial debug: jump to the game-over screen with a given score, without
+  // touching the saved high score (for checking that screen on hardware)
+  void debugGameOver(uint32_t sc) {
+    for (Ball& b : balls) b.live = false;
+    endMultiball(false);
+    demo = false;
+    bonusActive = false;
+    score = sc;
+    state = GAMEOVER;
+    stateT = 2;  // past the TAP TO START delay
+    fullRedraw = true;
   }
 
   // a short note in the top bar, for a couple of seconds
@@ -948,6 +1018,7 @@ class Game {
   }
 
   void synComplete() {
+    gameSyns++;
     addScore(2000);
     if (mult < 5) mult++;
     markApron();
@@ -981,8 +1052,16 @@ class Game {
         markSpinner();
         addScore(25000);
         say("HANDSHAKE!", 2.5f);
+        gameHandshakes++;
         events |= EV_JACKPOT;
         startMultiball();  // no-op if already flooding
+        if (gameHandshakes == 2) {  // the second HANDSHAKE of a game: extra ball
+          extraBalls++;
+          nExtra++;
+          markApron();
+          say("EXTRA BALL!", 2.5f);
+          events |= EV_EXTRA;
+        }
       } else {
         addScore(5000);
         say(relit ? "KICKBACK LIT" : "ACK", 1.5f);
@@ -1140,7 +1219,12 @@ class Game {
   // the bonus is done (or there was none): next ball, or the game is over
   void finishBall() {
     resetBallCounts();
-    if (bonusThenOver) {
+    bool again = extraBalls > 0;  // SHOOT AGAIN: same ball number
+    if (again) {
+      extraBalls--;
+      markApron();
+    }
+    if (bonusThenOver && !again) {
       if (demo) { endDemo(); return; }
       state = GAMEOVER;
       stateT = 0;
@@ -1149,14 +1233,15 @@ class Game {
       fullRedraw = true;
       return;
     }
-    ball++;
+    if (!again) ball++;
     mult = 1;
     markApron();
     synArmed = false;
     markSpinner();
     markHud();
     char buf[20];
-    snprintf(buf, sizeof buf, "BALL %d", ball);
+    if (again) snprintf(buf, sizeof buf, "SHOOT AGAIN");
+    else snprintf(buf, sizeof buf, "BALL %d", ball);
     say(buf, 1.5f);
     serveBall();
   }

@@ -65,13 +65,13 @@ board::Touch held[board::MAX_TOUCH];
 int heldN = 0;
 uint32_t lastPoll = 0, lastFresh = 0;
 
-// the note the synth is playing; gen bumps on every new note
+// the note each synth voice is playing; gen bumps on every new note
 struct NoteCmd {
   uint16_t hz, toHz, ms;
   uint8_t wave;
 };
-NoteCmd note = {0, 0, 0, 0};
-volatile uint32_t noteGen = 0;
+NoteCmd note[board::VOICES] = {};
+volatile uint32_t noteGen[board::VOICES] = {};
 portMUX_TYPE noteMux = portMUX_INITIALIZER_UNLOCKED;
 volatile uint8_t volume = 2;
 uint8_t brightness = 255;
@@ -129,55 +129,63 @@ int touchPoll(board::Touch* pts) {
   return n;
 }
 
-// A one-voice synth: square / 25% pulse / triangle / saw / noise, a linear
-// pitch sweep, a 3 ms attack and an exponential decay (a struck sound, not
-// an organ). Silence fades out rather than cutting, so there are no clicks.
+// A small synth: VOICES voices, each square / 25% pulse / triangle / saw /
+// noise with a linear pitch sweep, a 3 ms attack and an exponential decay (a
+// struck sound, not an organ), mixed together so sounds overlap.
+struct Voice {
+  NoteCmd n = {0, 0, 0, 0};
+  uint32_t gen = 0, elapsed = 0, len = 1;
+  float phase = 0, env = 0, decay = 1, sweep = 0, freq = 0, noise = 0;
+  uint16_t lfsr = 0xACE1;
+
+  float sample() {
+    constexpr uint32_t ATTACK = SAMPLE_RATE * 3 / 1000;
+    if (!n.hz || elapsed >= len) return 0;
+    env = elapsed < ATTACK ? (float)elapsed / ATTACK : env * decay;
+    phase += freq / SAMPLE_RATE;
+    if (phase >= 1) {
+      phase -= 1;
+      lfsr = (lfsr >> 1) ^ (-(lfsr & 1u) & 0xB400u);  // new noise value per cycle
+      noise = (lfsr & 1) ? 1.0f : -1.0f;
+    }
+    float s;
+    switch (n.wave) {
+      case board::W_PULSE: s = phase < 0.25f ? 1 : -1; break;
+      case board::W_TRI:   s = 4 * fabsf(phase - 0.5f) - 1; break;
+      case board::W_SAW:   s = 2 * phase - 1; break;
+      case board::W_NOISE: s = noise; break;
+      default:             s = phase < 0.5f ? 1 : -1; break;
+    }
+    freq += sweep;
+    elapsed++;
+    return s * env;
+  }
+};
+
 void audioTask(void*) {
   int16_t buf[128 * 2];
-  float phase = 0, env = 0, decay = 1, sweep = 0, freq = 0, lfsrOut = 0;
-  uint32_t gen = 0, elapsed = 0, len = 1;
-  uint16_t lfsr = 0xACE1;
-  NoteCmd n = {0, 0, 0, 0};
+  Voice v[board::VOICES];
   for (;;) {
-    if (gen != noteGen) {
-      portENTER_CRITICAL(&noteMux);
-      n = note;
-      gen = noteGen;
-      portEXIT_CRITICAL(&noteMux);
-      elapsed = 0;
-      len = n.ms ? (uint32_t)n.ms * SAMPLE_RATE / 1000 : SAMPLE_RATE;  // untimed: 1 s
-      decay = expf(-1.0f / (len * 0.55f));
-      freq = n.hz;
-      sweep = n.toHz ? ((float)n.toHz - n.hz) / len : 0;
-    }
-    float amp = AMP[volume];
+    for (int k = 0; k < board::VOICES; k++)
+      if (v[k].gen != noteGen[k]) {
+        portENTER_CRITICAL(&noteMux);
+        v[k].n = note[k];
+        v[k].gen = noteGen[k];
+        portEXIT_CRITICAL(&noteMux);
+        const NoteCmd& n = v[k].n;
+        v[k].elapsed = 0;
+        v[k].len = n.ms ? (uint32_t)n.ms * SAMPLE_RATE / 1000 : SAMPLE_RATE;  // untimed: 1 s
+        v[k].decay = expf(-1.0f / (v[k].len * 0.55f));
+        v[k].freq = n.hz;
+        v[k].sweep = n.toHz ? ((float)n.toHz - n.hz) / v[k].len : 0;
+      }
+    float amp = AMP[volume] * 0.7f;  // headroom for voices summing
     for (int i = 0; i < 128; i++) {
       float s = 0;
-      if (n.hz && elapsed < len) {
-        float a = elapsed < SAMPLE_RATE * 3 / 1000 ? 1.0f : env * decay;  // attack, then decay
-        env = elapsed < SAMPLE_RATE * 3 / 1000 ? (float)elapsed / (SAMPLE_RATE * 3 / 1000) : a;
-        phase += freq / SAMPLE_RATE;
-        if (phase >= 1) {
-          phase -= 1;
-          lfsr = (lfsr >> 1) ^ (-(lfsr & 1u) & 0xB400u);  // new noise value per cycle
-          lfsrOut = (lfsr & 1) ? 1.0f : -1.0f;
-        }
-        switch (n.wave) {
-          case board::W_PULSE: s = phase < 0.25f ? 1 : -1; break;
-          case board::W_TRI:   s = 4 * fabsf(phase - 0.5f) - 1; break;
-          case board::W_SAW:   s = 2 * phase - 1; break;
-          case board::W_NOISE: s = lfsrOut; break;
-          default:             s = phase < 0.5f ? 1 : -1; break;
-        }
-        s *= env;
-        freq += sweep;
-        elapsed++;
-      } else {
-        env *= 0.995f;  // release
-        s = 0;
-      }
-      int16_t v = (int16_t)(s * amp);
-      buf[2 * i] = buf[2 * i + 1] = v;
+      for (int k = 0; k < board::VOICES; k++) s += v[k].sample();
+      float o = s * amp;
+      int16_t q = (int16_t)(o > 32000 ? 32000 : (o < -32000 ? -32000 : o));
+      buf[2 * i] = buf[2 * i + 1] = q;
     }
     size_t wrote;
     i2s_write(I2S_NUM_0, buf, sizeof buf, &wrote, portMAX_DELAY);
@@ -291,10 +299,11 @@ bool btnLeft() { return digitalRead(PIN_BTN_LEFT) == LOW; }
 bool btnRight() { return digitalRead(PIN_BTN_RIGHT) == LOW; }
 bool btnLaunch() { return digitalRead(PIN_BTN_LAUNCH) == LOW; }
 
-void tone(uint16_t hz, uint8_t wave, uint16_t toHz, uint16_t ms) {
+void tone(uint8_t voice, uint16_t hz, uint8_t wave, uint16_t toHz, uint16_t ms) {
+  if (voice >= VOICES) return;
   portENTER_CRITICAL(&noteMux);
-  note = {hz, toHz, ms, wave};
-  noteGen = noteGen + 1;
+  note[voice] = {hz, toHz, ms, wave};
+  noteGen[voice] = noteGen[voice] + 1;
   portEXIT_CRITICAL(&noteMux);
 }
 void setVolume(uint8_t level) { volume = level < VOLUME_LEVELS ? level : VOLUME_LEVELS - 1; }

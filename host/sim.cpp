@@ -15,6 +15,9 @@
 
 using namespace pb;
 
+static int failures = 0;  // the exit code: CI fails the build on any
+#define CHECK(cond, ...) do { if (!(cond)) { failures++; printf("  FAIL: " __VA_ARGS__); printf("\n"); } } while (0)
+
 struct HostCanvas {
   std::vector<uint32_t> px = std::vector<uint32_t>(SCR_W * SCR_H, 0);
   int ox = 0, oy = 0, w = SCR_W, h = SCR_H;
@@ -155,6 +158,8 @@ static void soak(HostCanvas& cv, int balls) {
   Game g;
   pb::Bot bot;
   long frames = 0, escapes = 0, lives = 0, outL = 0, outR = 0, centre = 0;
+  int games = 0, syn2 = 0, syn3 = 0, hs1 = 0, hs2 = 0;
+  std::vector<uint32_t> scores;
   long mbFrames = 0, maxLive = 0;
   double totalLife = 0;
   uint32_t traceColor[4] = {0x00ff00, 0xff8800, 0x00ffff, 0xff00ff};
@@ -162,7 +167,17 @@ static void soak(HostCanvas& cv, int balls) {
   float lifeT = 0;
   float lastX[MAXBALLS] = {};
   while (played < balls) {
-    if (g.state != PLAY) { g.startGame(); g.hiscore = 0; }
+    if (g.state != PLAY) {
+      if (g.ball > 0) {  // a game just ended: tally it
+        games++;
+        if (g.gameSyns >= 2) syn2++;
+        if (g.gameSyns >= 3) syn3++;
+        if (g.gameHandshakes >= 1) hs1++;
+        if (g.gameHandshakes >= 2) hs2++;
+        scores.push_back(g.score);
+      }
+      g.startGame(); g.hiscore = 0;
+    }
     Input in = bot.step(g, 1 / 60.f);
     for (int k = 0; k < MAXBALLS; k++)
       if (g.balls[k].live && g.balls[k].p.y > 440 && g.balls[k].p.y < 470) lastX[k] = g.balls[k].p.x;
@@ -195,6 +210,7 @@ static void soak(HostCanvas& cv, int balls) {
     g.ndirty = 0;
     if (lifeT > 600) {
       printf("  !! ball alive >10 min, p=(%.1f,%.1f)\n", B(g).p.x, B(g).p.y);
+      failures++;
       g.serveBall();
       lifeT = 0;
     }
@@ -206,8 +222,16 @@ static void soak(HostCanvas& cv, int balls) {
   printf("  flipper hits (sound events) %u\n", g.nFlipHit);
   printf("  ramp: entered %u, completed %u, ride avg %.2fs max %.2fs\n", g.nRampIn, g.nRamp,
          g.nRamp ? g.rampRideSum / g.nRamp : 0.0f, g.rampRideMax);
+  std::sort(scores.begin(), scores.end());
+  if (games)
+    printf("  per game (%d): SYN>=2 %d%%  SYN>=3 %d%%  HANDSHAKE>=1 %d%%  >=2 %d%%  score median %u, p75 %u, p90 %u\n",
+           games, 100 * syn2 / games, 100 * syn3 / games, 100 * hs1 / games, 100 * hs2 / games,
+           scores[games / 2], scores[games * 3 / 4], scores[games * 9 / 10]);
   printf("  multiballs %u  (%.1f%% of play time, max %ld balls live)\n", g.nMulti,
          100.0 * mbFrames / frames, maxLive);
+  printf("  skill shots %u, extra balls %u\n", g.nSkill, g.nExtra);
+  CHECK(escapes == 0, "%ld balls escaped the table", escapes);
+  CHECK(g.nMulti > 0 && g.nRamp > 0 && g.nLane > 0, "a feature never triggered in the soak");
 }
 
 // force multiball repeatedly and check it feeds, plays and winds down
@@ -240,6 +264,7 @@ static void testMultiball() {
   }
   printf("  %d runs: reached %d balls in %d, ended cleanly in %d, avg %.1fs, escapes %d\n",
          runs, MAXBALLS, reached3, ended, dur / runs, escapes);
+  CHECK(reached3 == runs && ended == runs && escapes == 0, "multiball misbehaved");
 }
 
 static void testDirtyConsistency() {
@@ -281,6 +306,7 @@ static void testDirtyConsistency() {
     }
   }
   printf("  %d / 600 frames mismatched\n", mismatches);
+  CHECK(mismatches == 0, "dirty-rect redraws differ from a full redraw");
 }
 
 // demo: idles into a bot game, which never sets the high score and returns
@@ -302,12 +328,14 @@ static void testDemo() {
   }
   printf("  10 min idle: %d demos started, %d returned to title, hiscore %u (should be 1)\n",
          started, returned, g.hiscore);
+  CHECK(g.hiscore == 1 && started >= 3, "demo set the high score or never ran");
   // tap during a demo
   if (!g.demo) g.startDemo();
   for (int f = 0; f < 300; f++) g.frame(1 / 60.f, bot.step(g, 1 / 60.f));
   g.tap();
   printf("  tap mid-demo: state %s, demo %d, score %u, ball %d\n",
          g.state == PLAY ? "PLAY" : "other", g.demo, g.score, g.ball);
+  CHECK(g.state == PLAY && !g.demo && g.score == 0 && g.ball == 1, "tap mid-demo didn't start a fresh game");
 }
 
 // bonus: drain with known counts and check the count-up adds exactly
@@ -337,6 +365,7 @@ static void testBonus() {
     }
     printf("  %s: bonus %u (expected %u) in %.1fs, now ball %d, live %d, mult %d\n",
            fast ? "hurried" : "normal ", g.score - s0, expect, t, g.ball, g.liveCount(), g.mult);
+    CHECK(g.score - s0 == expect && g.ball == 2 && g.liveCount() == 1, "bonus total or next ball wrong");
   }
 }
 
@@ -365,7 +394,53 @@ static void testRoll() {
       sumV += v; n++;
     }
     printf("  %-34s %.2fs to leave, avg %.0f px/s, max %.0f px/s\n", c.what, t, sumV / n, maxV);
+    CHECK(t < 1.5f, "ball crawled: %.2fs", t);
   }
+}
+
+// skill shot: a release inside the zone pays, one outside doesn't; and an
+// extra ball replays the same ball number, then the game ends normally
+static void testSkillAndExtra() {
+  printf("== skill shot / extra ball ==\n");
+  for (int inside = 0; inside < 2; inside++) {
+    Game g;
+    g.startGame();
+    float target = inside ? (g.skillLo + g.skillHi) / 2 : g.skillHi + 0.08f;
+    Input in{false, false, true};
+    while (g.charge < target) g.frame(1 / 120.f, in);
+    float released = g.charge;
+    in.touch = false;
+    g.frame(1 / 60.f, in);
+    printf("  release at %.2f (zone %.2f-%.2f): skill shots %u, score %u\n", released, g.skillLo,
+           g.skillHi, g.nSkill, g.score);
+    CHECK((g.nSkill == 1) == (inside == 1), "skill shot %s", inside ? "missed inside the zone" : "paid outside the zone");
+  }
+  Game g;
+  g.startGame();
+  g.ball = BALLS_PER_GAME;
+  g.extraBalls = 1;
+  // drop the ball down the middle (no flips) and run until the next ball is
+  // on the plunger, or the game is over
+  auto drainNow = [&]() {
+    B(g).p = {148, 300};
+    B(g).v = {0, 0};
+    g.everLeftLane = true;
+    g.saveT = 0;
+    bool drained = false;
+    for (int f = 0; f < 60 * 40 && g.state == PLAY; f++) {
+      g.frame(1 / 60.f, {false, false, false});
+      g.ndirty = 0;
+      if (g.bonusActive || !B(g).live) drained = true;
+      if (drained && !g.bonusActive && g.ballInLane()) break;
+    }
+  };
+  drainNow();
+  printf("  after draining ball %d with an extra ball: state %s, ball %d, extra %d\n",
+         BALLS_PER_GAME, g.state == PLAY ? "PLAY" : "GAMEOVER", g.ball, g.extraBalls);
+  CHECK(g.state == PLAY && g.ball == BALLS_PER_GAME && g.extraBalls == 0, "extra ball didn't replay the ball");
+  drainNow();
+  printf("  draining it again: state %s\n", g.state == PLAY ? "PLAY" : "GAMEOVER");
+  CHECK(g.state == GAMEOVER, "game didn't end after the extra ball");
 }
 
 int main() {
@@ -383,8 +458,10 @@ int main() {
   testMultiball();
   testBonus();
   testRoll();
+  testSkillAndExtra();
   testDemo();
   testDirtyConsistency();
   cv.save("table.ppm");
-  return 0;
+  printf(failures ? "\n%d FAILURE(S)\n" : "\nall checks passed\n", failures);
+  return failures ? 1 : 0;
 }

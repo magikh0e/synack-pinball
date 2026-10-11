@@ -85,9 +85,20 @@ bool btnLaunch() { return pressed(PIN_BTN_LAUNCH); }
 static const uint16_t DUTY[VOLUME_LEVELS] = {0, 40, 160, 511};
 static uint8_t volume = 3;
 
-void tone(uint16_t hz, uint8_t, uint16_t, uint16_t) {
-  ledcWriteTone(SPK_CH, hz);  // sets 10-bit resolution at 50% duty
-  if (hz) ledcWrite(SPK_CH, DUTY[volume]);
+// one buzzer: it plays the most recently started voice that is still sounding
+static uint16_t voiceHz[VOICES];
+static uint32_t voiceSeq[VOICES], seqNo = 0;
+
+void tone(uint8_t v, uint16_t hz, uint8_t, uint16_t, uint16_t) {
+  if (v >= VOICES) return;
+  voiceHz[v] = hz;
+  voiceSeq[v] = ++seqNo;
+  int best = -1;
+  for (int i = 0; i < VOICES; i++)
+    if (voiceHz[i] && (best < 0 || voiceSeq[i] > voiceSeq[best])) best = i;
+  uint16_t out = best >= 0 ? voiceHz[best] : 0;
+  ledcWriteTone(SPK_CH, out);  // sets 10-bit resolution at 50% duty
+  if (out) ledcWrite(SPK_CH, DUTY[volume]);
 }
 void setVolume(uint8_t level) { volume = level < VOLUME_LEVELS ? level : VOLUME_LEVELS - 1; }
 

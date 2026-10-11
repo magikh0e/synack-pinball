@@ -1,6 +1,11 @@
 # SYN/ACK pinball
 
-![gameplay](docs/screenshot-play.png) ![title](docs/screenshot-attract.png)
+[![build](https://github.com/magikh0e/synack-pinball/actions/workflows/build.yml/badge.svg)](https://github.com/magikh0e/synack-pinball/actions/workflows/build.yml)
+
+![multiball](docs/screenshot-play.png) ![title](docs/screenshot-attract.png) ![game over](docs/screenshot-gameover.png)
+
+*Read straight off the CYD's panel: SYN FLOOD multiball in the attract demo,
+the title screen mid light show, and a new high score.*
 
 A pinball table for 3.5" 320x480 ESP32 touch boards. Two are supported, from
 one codebase:
@@ -41,6 +46,11 @@ thumb on each side lands in the middle zone and fires both flippers.
 - **Spinner** in the left orbit lane: 100 per half turn, doubled (and the plate
   turns magenta) while SYN is armed.
 - Pop bumpers 100, slingshots 10. The high score is kept in NVS.
+- **Skill shot:** a magenta zone sits beside the plunger's power meter (it
+  moves each ball). Release with the power inside it for 5,000; the meter
+  turns white while you're in the zone.
+- **Extra ball:** the second HANDSHAKE of a game. SHOOT AGAIN stays lit
+  until it's played, and the same ball number goes again.
 - **End-of-ball bonus:** each ramp 1,000, lane 250, target 250 and spinner
   half-turn 25, times the multiplier, counted into the score after every
   drain. Any press hurries it along.
@@ -53,10 +63,14 @@ plays itself (silently, never touching the high score) with **DEMO · TAP TO
 PLAY** in the top bar. Any tap starts a real game; a demo returns to the title
 when it ends or after 90 s.
 
+**Between games** the lamps chase around the table; on a new high score they
+all flash.
+
 **Volume:** off the table (title, game over, demo) hold **BOOT** for a second
 to cycle off / low / medium / high; a short press still starts a game. Kept in
-NVS. The ES3C35P synthesizes its sounds (square, pulse, triangle, saw, noise,
-pitch sweeps); the CYD's buzzer plays the same tunes as plain beeps.
+NVS. The ES3C35P synthesizes its sounds on three mixed voices (square, pulse,
+triangle, saw, noise, pitch sweeps), so a flipper thwack doesn't cut off a
+bumper; the CYD's single buzzer plays the newest sound as plain beeps.
 
 **Idle:** after 2 minutes with no touch or button the backlight dims, and after
 10 minutes it goes dark and stops drawing. Any touch wakes it (that touch is
@@ -67,8 +81,11 @@ ignored, so it doesn't also start a game).
 ```
 pio run -t upload --upload-port COM4                 # CYD
 pio run -e es3c35p -t upload --upload-port COM6      # ES3C35P (native USB)
-pio device monitor        # fps + heap every 5 s; 'b' toggles a bot player, 'm' starts multiball
+pio device monitor        # fps, worst frame and heap every 5 s
+                          # serial: 'b' bot player, 'm' multiball, 'p' screenshot,
+                          # 'h<n>' set high score, 'o<n>' game-over screen with score n
 python host/shot.py shot.png --reset --pre bm --wait 8   # real screenshot off the panel ('p')
+sh host/run.sh            # PC tests (Docker g++); exits non-zero on any failed check
 ```
 
 ## Layout

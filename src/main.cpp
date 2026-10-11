@@ -107,13 +107,20 @@ bool overlaps(const pb::Rect& a, const pb::Rect& b) {
   return a.x < b.x + b.w && b.x < a.x + a.w && a.y < b.y + b.h && b.y < a.y + a.h;
 }
 
+// A full redraw (new game, game over, waking) takes ~170 ms on the ES3C35P,
+// and a frame that long plays in slow motion. So it goes out in bands over a
+// few frames, alongside the normal dirty rects; anything that changes in a
+// band not yet repainted is dirty anyway, so the screen is right throughout.
+constexpr int FULL_BAND = 48;  // rows per frame (one render buffer): 10 frames of ~20 ms
+int fullRow = pb::SCR_H;       // next row of a full redraw still to paint
+
 void renderFrame() {
   board::beginFrame();
   if (game.fullRedraw) {
     game.fullRedraw = false;
-    game.ndirty = 0;
-    paint(0, 0, pb::SCR_W, pb::SCR_H);
-  } else {
+    fullRow = 0;
+  }
+  {
     pb::Rect* d = game.dirty;
     int n = game.ndirty;
     // widen to the panel's column alignment before merging
@@ -143,6 +150,11 @@ void renderFrame() {
     for (int i = 0; i < n; i++) paint(d[i].x, d[i].y, d[i].w, d[i].h);
     game.ndirty = 0;
   }
+  if (fullRow < pb::SCR_H) {
+    int h = min(FULL_BAND, pb::SCR_H - fullRow);
+    paint(0, fullRow, pb::SCR_W, h);
+    fullRow += h;
+  }
   board::endFrame();
 }
 
@@ -155,33 +167,55 @@ struct Note {
   uint8_t wave = W_SQUARE;
   uint16_t to = 0;
 };
-Note sq[12];
-int sqLen = 0, sqPos = 0, sqPrio = -1;
-uint32_t noteEnd = 0;
 uint8_t volume = 2;  // 0..3, kept in NVS
+
+// One channel per synth voice, each with its own note queue. Clicks and ticks
+// (priority 0-1: spinner, slings, flipper presses, bonus ticks) share the last
+// voice, so they can never cut off a bumper or a fanfare; everything else
+// takes an idle voice, or bumps the lowest-priority one if it outranks it.
+struct Chan {
+  Note q[12];
+  int len = 0, pos = 0, prio = -1;
+  uint32_t end = 0;
+  bool idle() const { return pos >= len && !end; }
+};
+Chan chans[board::VOICES];
 
 void sfx(int prio, std::initializer_list<Note> notes) {
   if (!SOUND_ON || volume == 0) return;
-  if (sqPos < sqLen && prio < sqPrio) return;  // don't cut off something bigger
-  sqLen = 0;
-  for (const Note& n : notes) if (sqLen < 12) sq[sqLen++] = n;
-  sqPos = 0;
-  sqPrio = prio;
-  noteEnd = 0;
+  constexpr int NV = board::VOICES;
+  int pick = -1;
+  if (prio <= 1) {
+    pick = NV - 1;
+  } else {
+    for (int i = 0; i < NV - 1 && pick < 0; i++)
+      if (chans[i].idle()) pick = i;
+    for (int i = 0; i < NV - 1 && pick < 0; i++)
+      if (chans[i].prio <= prio && (pick < 0 || chans[i].prio < chans[pick].prio)) pick = i;
+    if (pick < 0) return;  // everything playing matters more
+  }
+  Chan& c = chans[pick];
+  c.len = 0;
+  for (const Note& n : notes) if (c.len < 12) c.q[c.len++] = n;
+  c.pos = 0;
+  c.prio = prio;
+  c.end = 0;
 }
 
 void sfxUpdate() {
   uint32_t now = millis();
-  if (now < noteEnd) return;
-  if (sqPos < sqLen) {
-    const Note& n = sq[sqPos];
-    board::tone(n.hz, n.wave, n.to, n.ms);
-    noteEnd = now + n.ms;
-    sqPos++;
-  } else if (noteEnd) {
-    board::tone(0);
-    noteEnd = 0;
-    sqPrio = -1;
+  for (int v = 0; v < board::VOICES; v++) {
+    Chan& c = chans[v];
+    if (c.end && now < c.end) continue;
+    if (c.pos < c.len) {
+      const Note& n = c.q[c.pos++];
+      board::tone(v, n.hz, n.wave, n.to, n.ms);
+      c.end = now + n.ms;
+    } else if (c.end) {
+      board::tone(v, 0);
+      c.end = 0;
+      c.prio = -1;
+    }
   }
 }
 
@@ -205,6 +239,10 @@ void handleEvents(uint32_t ev) {
              {784, 60, W_PULSE}, {1047, 60, W_PULSE}, {1568, 90, W_PULSE}, {1319, 90, W_PULSE},
              {1568, 90, W_PULSE}, {2093, 400, W_SAW, 2600}});
     led(true, false, true, 1500);
+  } else if (ev & EV_EXTRA) {
+    sfx(9, {{392, 80, W_PULSE}, {523, 80, W_PULSE}, {659, 80, W_PULSE}, {784, 80, W_PULSE},
+            {1047, 120, W_PULSE}, {784, 80, W_PULSE}, {1047, 500, W_SAW, 1568}});
+    led(true, true, true, 1200);
   } else if (ev & EV_JACKPOT) {
     sfx(9, {{523, 70, W_PULSE}, {659, 70, W_PULSE}, {784, 70, W_PULSE}, {1047, 120, W_PULSE},
             {784, 60, W_PULSE}, {1047, 60, W_PULSE}, {1319, 350, W_SAW, 1760}});
@@ -221,6 +259,9 @@ void handleEvents(uint32_t ev) {
   } else if (ev & (EV_SYN | EV_ACK)) {
     sfx(5, {{784, 60, W_PULSE}, {988, 60, W_PULSE}, {1175, 60, W_PULSE}, {1568, 200, W_PULSE}});
     led(true, true, false, 400);
+  } else if (ev & EV_SKILL) {
+    sfx(6, {{400, 220, W_SAW, 2000}, {2093, 90, W_TRI}, {2637, 160, W_TRI}});
+    led(true, false, true, 400);
   } else if (ev & EV_RAMP) {
     sfx(5, {{300, 260, W_SAW, 1500}, {1760, 160, W_TRI}});
     led(false, true, true, 300);
@@ -353,8 +394,10 @@ void setup() {
   board::setVolume(volume);
   lastInputMs = millis();
 
-  game.fullRedraw = true;
-  renderFrame();
+  board::beginFrame();
+  paint(0, 0, pb::SCR_W, pb::SCR_H);  // the first frame whole, before the backlight
+  board::endFrame();
+  game.fullRedraw = false;
   Serial.printf("[pinball] ready on %s, display %s, heap %u, hi %u\n", board::NAME,
                 displayOk ? "ok" : "FAILED", ESP.getFreeHeap(), game.hiscore);
 }
@@ -364,7 +407,8 @@ void loop() {
   static uint32_t fpsT = millis(), frames = 0;
 
   // serial debug: 'b' toggles the bot, 'm' starts multiball, 'p' screenshot,
-  // 'h<n>' sets the high score (e.g. "h0" clears it)
+  // 'h<n>' sets the high score (e.g. "h0" clears it), 'o<n>' shows the
+  // game-over screen with score n (the saved high score is untouched)
   if (Serial.available()) {
     int c = Serial.read();
     if (c == 'b') {
@@ -376,6 +420,8 @@ void loop() {
       dumpScreen();
     } else if (c == 'm') {
       game.startMultiball();
+    } else if (c == 'o') {
+      game.debugGameOver((uint32_t)Serial.parseInt());
     } else if (c == 'h') {
       game.hiscore = (uint32_t)Serial.parseInt();
       prefs.putUInt("hi", game.hiscore);
@@ -425,7 +471,7 @@ void loop() {
   if (power == DIMMED && idle > SLEEP_AFTER_MS) {
     power = ASLEEP;
     if (game.demo) game.endDemo();
-    board::tone(0);
+    for (int v = 0; v < board::VOICES; v++) board::tone(v, 0);
     board::led(false, false, false);
     board::setBrightness(0);
     Serial.println("[pinball] sleep");
