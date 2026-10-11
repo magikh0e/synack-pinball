@@ -1,7 +1,7 @@
 // LCDwiki ES3C35P (ESP32-S3, 3.5" 320x480): ST77922 panel over quad SPI with
 // its own capacitive multi-touch at I2C 0x55, ES8311 codec + speaker amp,
 // WS2812 LED, BOOT button. Pins are from the vendor pack's pin table and the
-// pueo bring-up (see s3/St77922Qspi.h).
+// panel bring-up notes in s3/St77922Qspi.h.
 //
 // The board brings out no free GPIO for flipper buttons (IO38/39 are the I2C
 // bus, IO43/44 are UART0), so the flippers are touch-only: with real

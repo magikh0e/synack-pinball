@@ -1,6 +1,6 @@
 /* ST77922 over quad SPI, on the pinned core.
  *
- * Probe code for the 3.5" ESP32-S3 panel. Not in the Pueo repo yet.
+ * Driver for the LCDwiki ES3C35P's 3.5" ESP32-S3 panel.
  *
  * Why this exists rather than a TFT_eSPI setup file: the panel's interface
  * is strapped in hardware by the ST77922's IM2/IM1/IM0 pins, and this
@@ -16,7 +16,7 @@
  * VARIABLE_ADDR flags, is already in ESP-IDF 4.4 and therefore already in
  * arduino-esp32 2.0.10. The vendor's own driver needs core 3.x only
  * because it is written against IDF 5's newer wrappers, not because the
- * transport demands them. Pueo's core pin survives.
+ * transport demands them, so this builds on the 2.0.x core.
  *
  * Commands and pixels go out differently, and deliberately. Neither
  * SPI_TRANS_MULTILINE_CMD nor _ADDR is set, so the opcode and address are
@@ -53,8 +53,8 @@ namespace St77922 {
  * this that reports anything: the panel itself cannot be read back. */
 bool begin();
 
-/* MADCTL. Rotation 0 is the panel's native portrait and is what Pueo's
- * CYD profile asks for, so nothing here transposes pixels. */
+/* MADCTL. Rotation 0 is the panel's native portrait and is what the
+ * table uses, so nothing here transposes pixels. */
 void setRotation(uint8_t r);
 
 /* A whole 320x480 frame of RGB565, chunked to the bus's transfer limit. */

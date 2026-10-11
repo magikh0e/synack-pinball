@@ -174,7 +174,7 @@ bool begin() {
 
 void setRotation(uint8_t r) {
   if (!s_ready) return;
-  /* Only the identity case is wired. Pueo's profile asks for rotation 0,
+  /* Only the identity case is wired. The table uses rotation 0,
    * which is this panel's native portrait, so the framebuffer and the
    * panel already agree and nothing has to be transposed. Anything else
    * would need the pixel shuffle the vendor driver does for 1 and 3, and
