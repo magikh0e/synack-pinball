@@ -8,7 +8,7 @@
 // Parts (set PART, or use export.sh to write every STL):
 //   body     - walls, floor, button holes, deck screw bosses, USB-C panel socket
 //   deck     - the sloped plate: screen window, board standoffs (M3 heat-set)
-//   backbox  - speaker grille and 2030 cavity-speaker pocket, marquee window
+//   backbox  - speaker grille and cavity-speaker pocket, marquee window
 //   marquee  - the SYN/ACK card that slides into the backbox
 //   assembly - everything in place, for checking (not for printing)
 //   section  - the assembly cut down the middle, with the hardware
@@ -16,7 +16,7 @@
 //
 // Hardware: 2x 24 mm arcade buttons (flippers; solder or right-angle spades give
 // the most room inside), 1x 16 mm momentary button
-// (launch), one 2030 cavity speaker (8 ohm, 1-2 W), 4x M3 heat-set inserts +
+// (launch), one 40.4 x 28.4 x 9.4 mm cavity speaker (8 ohm), 4x M3 heat-set inserts +
 // 4x M3x6 (board), 4x M3 heat-set inserts + 4x M3x8 countersunk (deck),
 // 4 rubber feet (10 mm), a USB-C panel-mount extension (30 cm, straight plug).
 //
@@ -80,11 +80,17 @@ PLUG_L = 33;  PLUG_W = 12;  PLUG_T = 7;
 PORT_N = -(3.7 + 1.6 + 1.6);   // board's USB-C centre, below the deck's underside
 
 // backbox
-BB_H = 57;
+
 BB_WALL = 2.0;
-SPK_W = 30.6; SPK_H = 20.6; SPK_T = 5.6;   // 2030 cavity speaker pocket
+// the speaker (as measured: 40.40 x 28.36 x 9.36 mm cavity speaker), lying
+// landscape behind the grille, with 0.3 mm clearance all round
+SPK_L = 40.40; SPK_WID = 28.36; SPK_THK = 9.36;
+SPK_W = SPK_L + 0.6; SPK_H = SPK_WID + 0.6; SPK_T = SPK_THK + 0.4;
+SPK_Z0 = 7;        // pocket bottom above the backbox's base (the USB plug's tail is below)
 MARQ_W = 70;  MARQ_H = 24;                  // window
 CARD_W = 74;  CARD_H = 29;  CARD_T = 1.6;   // marquee card
+// tall enough for the speaker pocket with the marquee card above it
+BB_H = ceil(SPK_Z0 + SPK_H + 3.2 + 3 + CARD_H + 1 + BB_WALL);
 PEG_D = 5;    PEG_L = 5;
 
 // the two flipper buttons face each other across the inside
@@ -98,6 +104,9 @@ echo(str("launch button: ", LAUNCH_GAP, " mm clear of the flipper buttons"));
 assert(LAUNCH_GAP >= 3, "launch button would hit a flipper button");
 assert(LAUNCH_Z - LAUNCH_BEZEL / 2 > 1 && LAUNCH_Z + LAUNCH_BEZEL / 2 < Z_FRONT, "launch bezel doesn't fit the front wall");
 assert(WALL <= 3.5, "walls too thick for the button nuts");
+echo(str("backbox height ", BB_H, " mm; cabinet ", Z_REAR + BB_H, " mm tall"));
+assert(SPK_W + 3.2 <= W - 2 * BB_WALL, "speaker pocket wider than the backbox");
+assert(SPK_T + 1.6 + CARD_T < REAR_D - 2 * BB_WALL, "speaker too thick for the backbox");
 
 // ---------------------------------------------------------------- helpers
 // deck-local frame: x across, s up the slope, n out of the plate (n = 0 is
@@ -219,7 +228,7 @@ module backbox() {
         translate([W / 2 + sx * (CARD_W / 2 + 1.2) - 1.2, BB_WALL, BB_H - BB_WALL - CARD_H - 1])
           cube([2.4, CARD_T + 1.6, CARD_H + 1]);
       // speaker pocket walls behind the grille
-      translate([W / 2 - SPK_W / 2 - 1.6, BB_WALL, 4])
+      translate([W / 2 - SPK_W / 2 - 1.6, BB_WALL, SPK_Z0])
         difference() {
           cube([SPK_W + 3.2, SPK_T + 1.6, SPK_H + 3.2]);
           translate([1.6, -eps, 1.6]) cube([SPK_W, SPK_T + eps, SPK_H]);
@@ -236,10 +245,10 @@ module backbox() {
     translate([W / 2 - CARD_W / 2 - 0.2, BB_WALL, BB_H - BB_WALL - CARD_H - 1 - eps])
       cube([CARD_W + 0.4, CARD_T + 0.3, CARD_H + 1 + eps]);
     // speaker grille: a field of 1.8 mm holes over the speaker's face
-    for (gx = [-12 : 3.4 : 12], gz = [-7 : 3.4 : 7])
-      translate([W / 2 + gx, -eps, 4 + 1.6 + SPK_H / 2 + gz]) rotate([-90, 0, 0]) cylinder(d = 1.8, h = BB_WALL + 2 * eps, $fn = 16);
+    for (gx = [-(SPK_W / 2 - 5) : 3.4 : SPK_W / 2 - 5], gz = [-(SPK_H / 2 - 5) : 3.4 : SPK_H / 2 - 5])
+      translate([W / 2 + gx, -eps, SPK_Z0 + 1.6 + SPK_H / 2 + gz]) rotate([-90, 0, 0]) cylinder(d = 1.8, h = BB_WALL + 2 * eps, $fn = 16);
     // wire hole from the speaker pocket to the body
-    translate([W / 2 - 4, BB_WALL + SPK_T + 1.6 - eps, -eps]) cube([8, 4, 6]);
+    translate([W / 2 - 4, BB_WALL + SPK_T + 1.6 - eps, -eps]) cube([8, 4, SPK_Z0 + 2]);
   }
 }
 
@@ -275,9 +284,12 @@ else if (PART == "deck")  // face down on the bed: smooth screen surround, stand
 else if (PART == "backbox")  // on its back: window and grille print as holes in a flat face
   rotate([-90, 0, 0]) translate([0, -D, -Z_REAR]) backbox();
 else if (PART == "marquee") marquee();
-else if (PART == "clash") {  // must be empty: the plug and the socket hit nothing printed
+else if (PART == "clash") {  // must be empty: plug, socket and speaker hit nothing printed
   intersection() {
-    union() { usbc_plug(); usbc_socket(); }
+    union() {
+      usbc_plug(); usbc_socket();
+      translate([W / 2 - SPK_L / 2, DECK_D + BB_WALL + 0.05, Z_REAR + SPK_Z0 + 1.6 + 0.3]) cube([SPK_L, SPK_THK, SPK_WID]);
+    }
     union() { body(); deck(); backbox(); }
   }
 }
@@ -293,7 +305,7 @@ else if (PART == "section") {  // the assembly cut down the middle, for checking
         color("#ff3df0", 0.6) translate([sx ? W - WALL : WALL, FLIP_Y, FLIP_Z])
           rotate([0, sx ? -90 : 90, 0]) cylinder(d = 24, h = BTN_BEHIND + BTN_CONN);
       color("#ffb454", 0.6) translate([LAUNCH_X, WALL, LAUNCH_Z]) rotate([-90, 0, 0]) cylinder(d = 16, h = 30);
-      color("#c0c0c0") translate([W / 2 - 15, DECK_D + BB_WALL, Z_REAR + 4 + 1.6]) cube([30, 5, 20]);  // 2030 speaker
+      color("#c0c0c0") translate([W / 2 - SPK_L / 2, DECK_D + BB_WALL, Z_REAR + SPK_Z0 + 1.6 + 0.3]) cube([SPK_L, SPK_THK, SPK_WID]);  // speaker
       color("#39ff6a") usbc_plug();
       color("#39ff6a") usbc_socket();
     }

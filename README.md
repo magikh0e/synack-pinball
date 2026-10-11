@@ -15,6 +15,10 @@ one codebase:
 | Sunton **ESP32-3248S035R** (CYD 3.5") | `esp32-3248s035r` (default) | ST7796 SPI, XPT2046 resistive | thirds of the screen, middle = both |
 | LCDwiki **ES3C35P** (ESP32-S3) | `es3c35p` | ST77922 quad SPI, capacitive multi-touch | each half of the screen, two thumbs at once |
 
+![both boards](docs/both-boards.jpg)
+
+*The same game on both boards: the CYD on the left, the ES3C35P on the right.*
+
 ## Play
 
 | Touch | Does |

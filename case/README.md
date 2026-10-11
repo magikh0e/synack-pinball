@@ -4,7 +4,7 @@
 
 A small pinball cabinet for the LCDwiki ES3C35P: the screen lies on a 30° deck,
 with a backbox and marquee above it, 24 mm arcade buttons on the sides for the
-flippers, and a launch button on the front. 92 × 136 × 152 mm.
+flippers, and a launch button on the front. 92 × 136 × 170 mm.
 
 The board mounts **upside down**: its USB-C, RESET and BOOT end faces the back
 of the cabinet. That keeps the speaker socket next to the backbox and the
@@ -45,7 +45,7 @@ out empty ("Current top level object is empty").
 |---|---|
 | 2 | 24 mm arcade button (flippers): 24 mm thread, ~30 mm body behind the panel |
 | 1 | 16 mm momentary panel button (launch), ≤3.5 mm panel; or a third 24 mm button with `LAUNCH_BTN=24` |
-| 1 | 2030 cavity speaker, 8 Ω, 1–2 W (20 × 30 × ~5 mm) |
+| 1 | cavity speaker, 40.4 × 28.4 × 9.4 mm (8 Ω; the board drives up to 1.5 W at 8 Ω) |
 | 8 | M3 heat-set inserts (OD ~4 mm, 4–5 mm long) |
 | 4 | M3 × 6 screws (board to deck) |
 | 4 | M3 × 8 countersunk screws (deck to body) |
@@ -78,7 +78,7 @@ the deck goes in **before** the backbox.
    through the opening in the body's top behind the deck. Coil the spare USB
    cable at the bottom of the body. Screw the deck down.
 7. Slide the marquee card up into its rails from the open bottom of the
-   backbox, and push the 2030 speaker into its pocket behind the grille (a dot
+   backbox, and push the speaker into its pocket behind the grille (a dot
    of hot glue holds it).
 8. Push the backbox's pegs into the body.
 
