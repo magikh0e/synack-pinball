@@ -11,7 +11,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        env: [esp32-3248s035r, es3c35p]
+        env: [esp32-3248s035r, es3c35p, es3c35p-cabinet]
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5

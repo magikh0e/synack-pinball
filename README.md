@@ -110,6 +110,13 @@ schematic, ST77922 specification and example code.
   the table to PPM, sweeps plunger power and flipper shots, soaks 300 balls
   with a bot, and checks that partial redraws match a full redraw pixel for pixel.
 
+## Cabinet
+
+[`case/`](case/README.md) has a printable tabletop cabinet for the ES3C35P (OpenSCAD, with
+ready STLs): a 30° deck, a backbox with marquee and speaker, and arcade buttons on
+the sides. It uses the `es3c35p-cabinet` firmware build, which turns the image
+180° because the board mounts upside down.
+
 ## Physical buttons
 
 Each is a momentary switch from the pin to GND; internal pull-ups, no resistors.

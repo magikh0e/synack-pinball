@@ -38,6 +38,14 @@
 #include "s3/St77922Qspi.h"
 #include "s3/es8311.h"
 
+// SCREEN_FLIP=1 (env es3c35p-cabinet): the board is mounted upside down, so
+// its USB-C, RESET and BOOT face the back of a cabinet and the speaker and
+// flipper-button sockets sit nearer their parts. The image and touch are
+// turned 180 degrees here; nothing above the board layer knows.
+#ifndef SCREEN_FLIP
+#define SCREEN_FLIP 0
+#endif
+
 namespace {
 
 // ---- touch: inside the ST77922, 16-bit registers, polled (INT never moves)
@@ -262,9 +270,22 @@ bool init() {
 void beginFrame() {}
 
 void pushRect(int x, int y, int w, int h, uint16_t* px) {
-  St77922::pushRect(x, y, w, h, px);  // synchronous
+  // the shadow keeps the game's orientation, so screenshots stay upright
   if (shadow)
     for (int r = 0; r < h; r++) memcpy(shadow + (y + r) * 320 + x, px + r * w, w * 2);
+#if SCREEN_FLIP
+  // 180 degrees: a rectangle turned half a turn is its pixels in reverse
+  // order, at the mirrored position. x and w stay multiples of ALIGN_X, so
+  // 320 - x - w does too (the ST77922's window rule still holds).
+  for (int i = 0, j = w * h - 1; i < j; i++, j--) {
+    uint16_t t = px[i];
+    px[i] = px[j];
+    px[j] = t;
+  }
+  St77922::pushRect(320 - x - w, 480 - y - h, w, h, px);  // synchronous
+#else
+  St77922::pushRect(x, y, w, h, px);  // synchronous
+#endif
 }
 
 void endFrame() {
@@ -285,6 +306,9 @@ int readTouch(Touch* pts) {
     int n = touchPoll(fresh);
     if (n >= 0) {
       memcpy(held, fresh, sizeof(Touch) * n);
+#if SCREEN_FLIP
+      for (int i = 0; i < n; i++) held[i] = {(int16_t)(319 - held[i].x), (int16_t)(479 - held[i].y)};
+#endif
       heldN = n;
       lastFresh = now;
     } else if (heldN && now - lastFresh >= TOUCH_HOLD_MS) {
