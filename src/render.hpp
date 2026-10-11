@@ -80,7 +80,8 @@ void drawWorld(G& g, const Game& s) {
   // spinner lane arrow lamp (magenta while the spinner is worth 2x)
   if (g.vis(SPIN_X0, SPIN_Y + 6, SPIN_X1, SPIN_Y + 24)) {
     float cx = (OUTER_L + SPIN_GUIDE_X) * 0.5f, y = SPIN_Y + 9;
-    g.tri(cx, y, cx - 6, y + 10, cx + 6, y + 10, s.synArmed ? MAG : AMBER_DIM);
+    uint32_t c = !s.synArmed ? AMBER_DIM : (s.blinkOn ? MAG : MAG_DARK);  // blinks: 2x
+    g.tri(cx, y, cx - 6, y + 10, cx + 6, y + 10, c);
   }
 
   // apron: SHOOT AGAIN lamp and the multiplier ladder
@@ -91,7 +92,7 @@ void drawWorld(G& g, const Game& s) {
       g.hline(x0, APRON_Y, x1 - x0, WALL_GLOW);
     }
     int cy = APRON_Y + (SCR_H - APRON_Y) / 2;
-    bool sa = s.saveLit && s.state == PLAY;
+    bool sa = s.saveLit && s.state == PLAY && (!s.saveBlinking() || s.blinkOn);
     if (sa) g.rect(APRON_L0 + 1, cy - 7, APRON_L1 - APRON_L0 - 2, 15, AMBER);
     g.text("SHOOT AGAIN", (APRON_L0 + APRON_L1) / 2, cy + 1, D_MC, F_SMALL, sa ? BG : AMBER_DIM);
     static const char* mt[4] = {"2x", "3x", "4x", "5x"};
@@ -139,12 +140,13 @@ void drawWorld(G& g, const Game& s) {
         float y0 = bankTy(id) + 3, y1 = bankTy(id + 1) - 3;
         if (!g.vis(BANK_X - 22, bankTy(id) - 6, LANE_X, bankTy(id + 1) + 6)) break;
         bool flash = s.targetFlash[id] > 0, lit = s.target[id];
-        uint32_t c = flash ? WHITE : (lit ? GREEN : GREEN_DIM);
+        bool beckon = !lit && s.synArmed && s.blinkOn;  // shoot here for the HANDSHAKE
+        uint32_t c = flash ? WHITE : (lit ? GREEN : (beckon ? GREEN_MID : GREEN_DIM));
         drawSeg(g, sg.a, sg.b, 2, WALL_GLOW, WALL);
         if (lit || flash) g.rect(BANK_X - 8, y0 - 1, 9, y1 - y0 + 2, GREEN_DIM);  // glow
         g.rect(BANK_X - 6, y0, 6, y1 - y0, c);
         static const char* tTxt[3] = {"A", "C", "K"};
-        g.text(tTxt[id], BANK_X - 15, (y0 + y1) / 2, D_MC, F_SMALL, lit || flash ? GREEN : GREEN_MID);
+        g.text(tTxt[id], BANK_X - 15, (y0 + y1) / 2, D_MC, F_SMALL, lit || flash || beckon ? GREEN : GREEN_MID);
         break;
       }
     }
@@ -187,7 +189,7 @@ void drawWorld(G& g, const Game& s) {
   {
     V c = s.rampArrowAt(), d = s.rampDir, n = perp(d);
     if (g.vis(c.x - 9, c.y - 9, c.x + 9, c.y + 9)) {
-      uint32_t col = s.multiball ? MAG : AMBER;
+      uint32_t col = s.multiball ? (s.blinkOn ? MAG : MAG_DARK) : AMBER;  // blinks: jackpot
       V tip = c + d * 7, b0 = c - d * 4 + n * 6, b1 = c - d * 4 - n * 6;
       g.tri(tip.x, tip.y, b0.x, b0.y, b1.x, b1.y, col);
     }
@@ -257,7 +259,9 @@ void drawWorld(G& g, const Game& s) {
     char b[24];
     fmtScore(b, sizeof b, s.score);
     g.text(b, 8, HUD_H / 2, D_ML, F_HUD, GREEN);
-    if (s.demo) {
+    if (s.hudNote[0]) {
+      g.text(s.hudNote, SCR_W - 8, HUD_H / 2, D_MR, F_SMALL, WALL);
+    } else if (s.demo) {
       g.text("DEMO", 196, HUD_H / 2, D_MC, F_SMALL, MAG);
       g.text("TAP TO PLAY", SCR_W - 8, HUD_H / 2, D_MR, F_SMALL, AMBER);
     } else if (s.state == PLAY) {

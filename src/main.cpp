@@ -147,13 +147,21 @@ void renderFrame() {
 }
 
 // ---------------------------------------------------------------- sound
-struct Note { uint16_t hz, ms; };
+// A note: start pitch, length, waveform, and an optional pitch to sweep to.
+using board::W_SQUARE; using board::W_PULSE; using board::W_TRI; using board::W_SAW;
+using board::W_NOISE;
+struct Note {
+  uint16_t hz, ms;
+  uint8_t wave = W_SQUARE;
+  uint16_t to = 0;
+};
 Note sq[12];
 int sqLen = 0, sqPos = 0, sqPrio = -1;
 uint32_t noteEnd = 0;
+uint8_t volume = 2;  // 0..3, kept in NVS
 
 void sfx(int prio, std::initializer_list<Note> notes) {
-  if (!SOUND_ON) return;
+  if (!SOUND_ON || volume == 0) return;
   if (sqPos < sqLen && prio < sqPrio) return;  // don't cut off something bigger
   sqLen = 0;
   for (const Note& n : notes) if (sqLen < 12) sq[sqLen++] = n;
@@ -166,8 +174,9 @@ void sfxUpdate() {
   uint32_t now = millis();
   if (now < noteEnd) return;
   if (sqPos < sqLen) {
-    board::tone(sq[sqPos].hz);
-    noteEnd = now + sq[sqPos].ms;
+    const Note& n = sq[sqPos];
+    board::tone(n.hz, n.wave, n.to, n.ms);
+    noteEnd = now + n.ms;
     sqPos++;
   } else if (noteEnd) {
     board::tone(0);
@@ -186,53 +195,73 @@ void ledUpdate() {
   if (ledUntil && millis() > ledUntil) { led(false, false, false, 0); ledUntil = 0; }
 }
 
+// Sound design. On the ES3C35P every field is heard; the CYD's buzzer plays
+// the start pitch of each note as a square wave.
 void handleEvents(uint32_t ev) {
   using namespace pb;
   if (game.demo) return;  // the demo plays silently
   if (ev & EV_MULTIBALL) {
-    sfx(10, {{523, 60}, {784, 60}, {1047, 60}, {523, 60}, {784, 60}, {1047, 60},
-             {1568, 90}, {1319, 90}, {1568, 90}, {2093, 260}});
+    sfx(10, {{523, 60, W_PULSE}, {784, 60, W_PULSE}, {1047, 60, W_PULSE}, {523, 60, W_PULSE},
+             {784, 60, W_PULSE}, {1047, 60, W_PULSE}, {1568, 90, W_PULSE}, {1319, 90, W_PULSE},
+             {1568, 90, W_PULSE}, {2093, 400, W_SAW, 2600}});
     led(true, false, true, 1500);
   } else if (ev & EV_JACKPOT) {
-    sfx(9, {{523, 70}, {659, 70}, {784, 70}, {1047, 120}, {784, 60}, {1047, 60}, {1319, 220}});
+    sfx(9, {{523, 70, W_PULSE}, {659, 70, W_PULSE}, {784, 70, W_PULSE}, {1047, 120, W_PULSE},
+            {784, 60, W_PULSE}, {1047, 60, W_PULSE}, {1319, 350, W_SAW, 1760}});
     led(true, true, true, 900);
   } else if (ev & EV_GAMEOVER) {
-    sfx(8, {{392, 160}, {330, 160}, {262, 160}, {196, 400}});
+    sfx(8, {{392, 200, W_TRI}, {330, 200, W_TRI}, {262, 200, W_TRI}, {196, 700, W_SAW, 98}});
     led(true, false, false, 1200);
   } else if (ev & EV_DRAIN) {
-    sfx(7, {{330, 120}, {247, 120}, {165, 260}});
+    sfx(7, {{440, 650, W_SAW, 70}});
     led(true, false, false, 500);
   } else if (ev & (EV_SAVE | EV_KICKBACK)) {
-    sfx(6, {{880, 60}, {1175, 60}, {1760, 120}});
+    sfx(6, {{880, 70, W_TRI}, {1175, 70, W_TRI}, {1760, 160, W_TRI}});
     led(false, true, false, 400);
   } else if (ev & (EV_SYN | EV_ACK)) {
-    sfx(5, {{784, 60}, {988, 60}, {1175, 60}, {1568, 140}});
+    sfx(5, {{784, 60, W_PULSE}, {988, 60, W_PULSE}, {1175, 60, W_PULSE}, {1568, 200, W_PULSE}});
     led(true, true, false, 400);
   } else if (ev & EV_RAMP) {
-    sfx(5, {{660, 50}, {880, 50}, {1100, 50}, {1320, 50}, {1760, 120}});
+    sfx(5, {{300, 260, W_SAW, 1500}, {1760, 160, W_TRI}});
     led(false, true, true, 300);
   } else if (ev & EV_START) {
-    sfx(5, {{262, 80}, {392, 80}, {523, 140}});
+    sfx(5, {{262, 90, W_TRI}, {392, 90, W_TRI}, {523, 200, W_TRI}});
+  } else if (ev & EV_BONUS_LINE) {
+    sfx(4, {{1047, 50, W_TRI}, {1568, 90, W_TRI}});
   } else if (ev & EV_LANE) {
-    sfx(3, {{1319, 40}, {1760, 60}});
+    sfx(3, {{1319, 45, W_TRI}, {1760, 80, W_TRI}});
     led(true, true, false, 120);
   } else if (ev & EV_TARGET) {
-    sfx(3, {{988, 30}, {1480, 50}});
+    sfx(3, {{988, 70, W_SQUARE, 1480}});
     led(false, true, false, 120);
+  } else if (ev & EV_FLIP_HIT) {
+    sfx(2, {{2800, 10, W_NOISE}, {190, 45, W_SQUARE, 90}});  // thwack
   } else if (ev & EV_BUMPER) {
-    sfx(2, {{1568, 25}, {1175, 25}});
+    sfx(2, {{3200, 18, W_NOISE}, {260, 55, W_SQUARE, 110}});
     led(true, false, true, 70);
+  } else if (ev & EV_BONUS_TICK) {
+    sfx(1, {{2093, 12, W_PULSE}});
   } else if (ev & EV_SPIN) {
-    sfx(1, {{2400, 6}});
+    sfx(1, {{2600, 6, W_PULSE}});
   } else if (ev & EV_SLING) {
-    sfx(1, {{700, 20}, {500, 20}});
+    sfx(1, {{2400, 14, W_NOISE}, {520, 28, W_SQUARE, 300}});
     led(true, false, false, 50);
   } else if (ev & EV_LAUNCH) {
-    sfx(2, {{180, 30}, {260, 30}, {360, 40}});
+    sfx(2, {{1500, 170, W_NOISE, 6000}});
   } else if (ev & EV_FLIP) {
-    sfx(0, {{110, 12}});
+    sfx(0, {{140, 28, W_TRI, 70}});
   }
 }
+
+// ---------------------------------------------------------------- idle
+// No touch or button for a while: dim the backlight, then switch it off and
+// stop drawing. Any touch wakes it; the touch that wakes a dark screen is
+// swallowed so it doesn't also start a game.
+constexpr uint32_t DIM_AFTER_MS = 2 * 60 * 1000;
+constexpr uint32_t SLEEP_AFTER_MS = 10 * 60 * 1000;
+constexpr uint8_t BRIGHT_DIM = 30;
+uint32_t lastInputMs = 0;
+enum Power : uint8_t { AWAKE, DIMMED, ASLEEP } power = AWAKE;
 
 // ---------------------------------------------------------------- input
 bool touching = false;
@@ -272,10 +301,12 @@ pb::Input readInput(bool* tapEdge) {
   in.left |= bl;
   in.right |= br;
   in.touch |= bx;  // the launch button charges the plunger like a touch
-  // pressing any button counts as a tap: starts a game, leaves the demo,
-  // takes over from the serial bot
+  lastInputMs = (n || bl || br || bx) ? millis() : lastInputMs;
+  // pressing a flipper button counts as a tap: starts a game, leaves the
+  // demo, takes over from the serial bot. (BOOT is handled in loop(): off the
+  // table a short press is a tap and a long press changes the volume.)
   static bool btnPrev = false;
-  bool anyBtn = bl || br || bx;
+  bool anyBtn = bl || br;
   if (anyBtn && !btnPrev) *tapEdge = true;
   btnPrev = anyBtn;
   return in;
@@ -318,6 +349,9 @@ void setup() {
 
   prefs.begin("pinball", false);
   game.hiscore = prefs.getUInt("hi", 0);
+  volume = prefs.getUChar("vol", board::DEFAULT_VOLUME);
+  board::setVolume(volume);
+  lastInputMs = millis();
 
   game.fullRedraw = true;
   renderFrame();
@@ -357,6 +391,67 @@ void loop() {
 
   bool tap;
   pb::Input in = readInput(&tap);
+  if (botOn) lastInputMs = millis();  // a soak test isn't idle
+
+  // ---- idle power: dim, then dark; wake on input
+  uint32_t idle = millis() - lastInputMs;
+  static bool swallow = false;  // the touch that woke a dark screen
+  if (power == ASLEEP) {
+    if (idle < 100) {
+      power = AWAKE;
+      board::setBrightness(board::BRIGHT_FULL);
+      game.fullRedraw = true;
+      game.stateT = 0;  // no demo straight away
+      swallow = true;
+      last = micros();
+      Serial.println("[pinball] wake");
+    } else {
+      delay(30);
+      return;
+    }
+  }
+  if (swallow) {
+    if (in.touch || in.left || in.right) { tap = false; in = {false, false, false}; }
+    else swallow = false;
+  }
+  if (power == DIMMED && idle < 100) {
+    power = AWAKE;
+    board::setBrightness(board::BRIGHT_FULL);
+  } else if (power == AWAKE && idle > DIM_AFTER_MS) {
+    power = DIMMED;
+    board::setBrightness(BRIGHT_DIM);
+    Serial.println("[pinball] dim");
+  }
+  if (power == DIMMED && idle > SLEEP_AFTER_MS) {
+    power = ASLEEP;
+    if (game.demo) game.endDemo();
+    board::tone(0);
+    board::led(false, false, false);
+    board::setBrightness(0);
+    Serial.println("[pinball] sleep");
+    return;
+  }
+
+  // ---- BOOT off the table: short press = tap, long press = volume
+  {
+    static bool bootPrev = false, bootLong = false;
+    static uint32_t bootDown = 0;
+    bool boot = board::btnLaunch();
+    bool offTable = game.state != pb::PLAY || game.demo;
+    if (boot && !bootPrev) { bootDown = millis(); bootLong = false; }
+    if (boot && offTable && !bootLong && millis() - bootDown > 800) {
+      bootLong = true;
+      volume = (volume + 1) % board::VOLUME_LEVELS;
+      board::setVolume(volume);
+      prefs.putUChar("vol", volume);
+      static const char* names[] = {"SOUND OFF", "VOLUME LOW", "VOLUME MED", "VOLUME HIGH"};
+      game.notify(names[volume]);
+      sfx(9, {{1047, 70, W_TRI}, {1568, 120, W_TRI}});  // a sample at the new level
+    }
+    if (!boot && bootPrev && offTable && !bootLong) tap = true;
+    bootPrev = boot;
+  }
+
   if (botOn && tap) {
     // a touch always takes the game back from the serial-debug bot
     botOn = false;

@@ -26,6 +26,11 @@ inline float len(V a) { return sqrtf(dot(a, a)); }
 inline V perp(V a) { return {-a.y, a.x}; }
 inline float clampf(float v, float lo, float hi) { return v < lo ? lo : (v > hi ? hi : v); }
 
+// Xtensa GCC 8.4 hits an internal compiler error ("insn does not satisfy its
+// constraints") when the bonus/blink code is inlined into Game::frame().
+// Keeping those helpers out of line avoids it.
+#define PB_NOINLINE __attribute__((noinline))
+
 // ---------------------------------------------------------------- tuning
 constexpr int   SCR_W = 320, SCR_H = 480;
 constexpr int   HUD_H = 30;          // score strip at the top
@@ -43,6 +48,12 @@ constexpr float PLUNGE_MIN = 480.0f, PLUNGE_MAX = 1250.0f, PLUNGE_FILL_S = 1.1f;
 constexpr float BALL_SAVE_S = 6.0f;
 constexpr int   BALLS_PER_GAME = 3;
 constexpr int   MAXBALLS = 3;         // on the table at once (multiball)
+// end-of-ball bonus, per item collected on that ball (then x the multiplier)
+constexpr uint32_t BONUS_RAMP = 1000, BONUS_LANE = 250, BONUS_TARGET = 250,
+                   BONUS_SPIN = 25;     // per spinner half turn
+constexpr float BONUS_STEP_S = 0.55f;   // per bonus line (fast-forward: 0.08)
+constexpr float BLINK_HZ = 3.0f;        // lamps that say "shoot here"
+constexpr float SAVE_WARN_S = 2.0f;     // SHOOT AGAIN blinks for its last 2 s
 constexpr float DEMO_IDLE_S = 15.0f;  // idle on title / game over before the demo
 constexpr float DEMO_MAX_S = 90.0f;   // longest demo before returning to the title
 constexpr float MB_SAVE_S = 10.0f;    // multiball ball save
@@ -182,6 +193,7 @@ enum : uint32_t {
   EV_SAVE = 1 << 8, EV_LAUNCH = 1 << 9, EV_FLIP = 1 << 10, EV_GAMEOVER = 1 << 11,
   EV_START = 1 << 12, EV_NUDGE = 1 << 13, EV_KICKBACK = 1 << 14,
   EV_SPIN = 1 << 15, EV_MULTIBALL = 1 << 16, EV_RAMP = 1 << 17,
+  EV_BONUS_LINE = 1 << 18, EV_BONUS_TICK = 1 << 19, EV_FLIP_HIT = 1 << 20,
 };
 
 // ---------------------------------------------------------------- game
@@ -203,6 +215,18 @@ class Game {
   bool multiball = false;             // SYN FLOOD running: scoring doubled
   bool demo = false;                  // attract-mode demo: the bot is playing
   bool saveLit = false;               // SHOOT AGAIN lamp (a ball save is running)
+  bool blinkOn = false;               // shared phase for every blinking lamp
+  // what this ball collected, for the end-of-ball bonus
+  uint32_t ballRamps = 0, ballLanes = 0, ballTargets = 0, ballSpins = 0;
+  // end-of-ball bonus count-up: it runs between a drain and the next ball
+  bool bonusActive = false, bonusFast = false;
+  int bonusStep = 0;
+  float bonusT = 0;
+  uint32_t bonusTotal = 0, bonusShown = 0;
+  bool bonusThenOver = false;
+  // a short note in the top bar (volume changes and the like)
+  char hudNote[16] = "";
+  float hudNoteT = 0;
   int pendingAdd = 0;                 // balls waiting to be auto-plunged
   float addT = 0;                     // delay before the next auto-plunge
   float mbSaveT = 0;                  // multiball ball-save time remaining
@@ -221,7 +245,7 @@ class Game {
   bool charging = false;
   float saveT = 0;                    // ball-save time remaining
   bool everLeftLane = false;
-  char msg[20] = "";
+  char msg[28] = "";
   float msgT = 0;
   float t = 0;                        // game clock, seconds
   float acc = 0;                      // physics time not yet simulated
@@ -237,6 +261,8 @@ class Game {
   // stats (host harness)
   uint32_t nBumper = 0, nSling = 0, nTarget = 0, nLane = 0, nNudge = 0, nKick = 0, nSpin = 0, nMulti = 0, nRampIn = 0, nRamp = 0;
   float rampRideSum = 0, rampRideMax = 0;  // completed rides, seconds
+  uint32_t nFlipHit = 0;
+  float flipHitT[2] = {-1, -1};  // last contact sound per flipper (game time)
 
   Game() { build(); resetFlippers(); }
 
@@ -334,6 +360,8 @@ class Game {
   // ------------------------------------------------------------ control
   void startGame() {
     demo = false;
+    bonusActive = false;
+    resetBallCounts();
     score = 0;
     ball = 1;
     mult = 1;
@@ -411,6 +439,8 @@ class Game {
     for (int i = 0; i < MAXBALLS; i++) { p0[i] = balls[i].p; live0[i] = balls[i].live; }
 
     if (msgT > 0 && (msgT -= dt) <= 0) { msg[0] = 0; markMsg(); }
+    if (hudNoteT > 0 && (hudNoteT -= dt) <= 0) { hudNote[0] = 0; markHud(); }
+    updateBlink();
     decay(bumpFlash, NBUMP, dt, [&](int i) { markCircle(BUMP_C[i], BUMP_R + 3); });
     decay(slingFlash, 2, dt, [&](int i) { markSling(i); });
     decay(targetFlash, 3, dt, [&](int i) { markTarget(i); });
@@ -426,6 +456,14 @@ class Game {
     }
 
     if (demo && stateT > DEMO_MAX_S) { endDemo(); return; }
+
+    if (bonusActive) {
+      updateFlipper(fl, in.left, dt);
+      updateFlipper(fr, in.right, dt);
+      if (in.left || in.right || in.touch) bonusFast = true;  // any press hurries it
+      updateBonus(dt);
+      return;
+    }
 
     // plunger: when a ball sits in the lane, a touch charges and release fires
     Ball* lb = laneBall();
@@ -510,6 +548,13 @@ class Game {
     }
   }
 
+  // a short note in the top bar, for a couple of seconds
+  void notify(const char* s) {
+    snprintf(hudNote, sizeof hudNote, "%s", s);
+    hudNoteT = 2.0f;
+    markHud();
+  }
+
   void tap() {  // touch on attract / game-over screen, or during the demo
     if (demo || state == ATTRACT || (state == GAMEOVER && stateT > 1.2f)) startGame();
   }
@@ -578,6 +623,23 @@ class Game {
   void markR(Rect r) { mark(r.x, r.y, r.x + r.w, r.y + r.h); }
   void markCircle(V c, float r) { mark(c.x - r, c.y - r, c.x + r, c.y + r); }
   void markBallAt(V q) { markCircle(q, BALL_R + 5); }  // covers a ramp ball's shadow
+  PB_NOINLINE void updateBlink() {
+    bool on = fmodf(t * BLINK_HZ, 1.0f) < 0.5f;
+    if (on == blinkOn) return;
+    blinkOn = on;
+    if (synArmed) {  // ACK targets say "finish me for the HANDSHAKE"
+      for (int i = 0; i < 3; i++)
+        if (!target[i]) markTarget(i);
+      markSpinner();
+    }
+    if (multiball) markRampArrow();  // jackpot lit
+    if (saveLit && saveBlinking()) markApron();
+  }
+  bool saveBlinking() const {
+    float left = saveT > mbSaveT ? saveT : mbSaveT;
+    return left > 0 && left < SAVE_WARN_S;
+  }
+
   void markRampArrow() { V c = rampArrowAt(); markCircle(c, 9); }
   V rampArrowAt() const { return RAMP_PATH[0] - rampDir * 22; }
   void markHud() { mark(0, 0, SCR_W, HUD_H); }
@@ -645,6 +707,7 @@ class Game {
     spinW = spinW * expf(-1.1f * dt) - 3.0f * dt;  // bearing drag + friction
     int halves = (int)floorf(spinAng / (float)M_PI) - (int)floorf(old / (float)M_PI);
     if (halves > 0 && state == PLAY) {
+      ballSpins += halves;
       addScore(SPIN_PTS * halves * (synArmed ? 2 : 1));  // doubled while SYN is armed
       events |= EV_SPIN;
     }
@@ -684,8 +747,14 @@ class Game {
     float vn = dot(rel, n);
     if (vn < 0) {
       rel = rel - n * ((1 + e) * vn);
-      V tg = perp(n);
-      rel = rel - tg * (dot(rel, tg) * 0.015f);  // a touch of friction
+      // a touch of friction on real impacts only. A ball rolling along a
+      // guide or flipper "hits" it every substep as gravity presses it in, and
+      // braking each of those (600/s) capped rolling at ~50 px/s: a ball took
+      // 2.6 s to roll down the inlane guide instead of ~0.7 s
+      if (vn < -60) {
+        V tg = perp(n);
+        rel = rel - tg * (dot(rel, tg) * 0.015f);
+      }
       b.v = rel + vs;
     }
     if (nOut) *nOut = n;
@@ -769,7 +838,16 @@ class Game {
   }
 
   void flipperCollide(Ball& b, Flipper& f) {
-    collide(b, f.piv, f.tip(), FLIP_RB, FLIP_RT, E_FLIP, &f.piv, f.w, nullptr, nullptr);
+    float vn;
+    if (!collide(b, f.piv, f.tip(), FLIP_RB, FLIP_RT, E_FLIP, &f.piv, f.w, nullptr, &vn)) return;
+    // a real hit (not a ball resting or rolling on it) makes a sound; one per
+    // flipper per 80 ms, since a hit spans several substeps
+    int side = &f == &fr;
+    if (vn < -120 && t - flipHitT[side] > 0.08f) {
+      flipHitT[side] = t;
+      nFlipHit++;
+      events |= EV_FLIP_HIT;
+    }
   }
 
   // equal-mass, slightly lossy collisions between balls
@@ -830,6 +908,7 @@ class Game {
       b.p = RAMP_PATH[RAMP_N - 1];
       b.v = tg * fminf(b.ru, RAMP_EXIT_MAX);
       nRamp++;
+      ballRamps++;
       rampRideSum += b.rideT;
       rampRideMax = fmaxf(rampRideMax, b.rideT);
       // the uplink also lights the next unlit S/Y/N lane
@@ -863,6 +942,7 @@ class Game {
     markLane(i);
     addScore(500);
     nLane++;
+    ballLanes++;
     events |= EV_LANE;
     if (lane[0] && lane[1] && lane[2]) synComplete();
   }
@@ -886,6 +966,7 @@ class Game {
     targetFlash[i] = 0.15f;
     markTarget(i);
     nTarget++;
+    ballTargets++;
     events |= EV_TARGET;
     if (target[i]) { addScore(100); return; }
     target[i] = true;
@@ -932,7 +1013,7 @@ class Game {
     if (announce) say("FLOOD OVER", 1.5f);
   }
 
-  void drainBall(Ball& b) {
+  PB_NOINLINE void drainBall(Ball& b) {
     b.live = false;
     markBallAt(b.p);
     if (liveCount() > 0 || pendingAdd > 0) {
@@ -955,9 +1036,112 @@ class Game {
       return;
     }
     events |= EV_DRAIN;
-    if (ball >= BALLS_PER_GAME) {
+    endMultiball(false);
+    startBonus(ball >= BALLS_PER_GAME);
+  }
+
+  void resetBallCounts() { ballRamps = ballLanes = ballTargets = ballSpins = 0; }
+
+  // ---- end-of-ball bonus: one line per thing collected, then the multiplier,
+  // then the total counting into the score
+  struct BonusLine {
+    const char* what;
+    uint32_t count, each;
+  };
+  int bonusLines(BonusLine* out) const {
+    int n = 0;
+    if (ballRamps) out[n++] = {"RAMPS", ballRamps, BONUS_RAMP};
+    if (ballLanes) out[n++] = {"LANES", ballLanes, BONUS_LANE};
+    if (ballTargets) out[n++] = {"TARGETS", ballTargets, BONUS_TARGET};
+    if (ballSpins) out[n++] = {"SPINS", ballSpins, BONUS_SPIN};
+    return n;
+  }
+
+  PB_NOINLINE void startBonus(bool thenOver) {
+    BonusLine L[4];
+    int n = bonusLines(L);
+    uint32_t base = 0;
+    for (int i = 0; i < n; i++) base += L[i].count * L[i].each;
+    bonusThenOver = thenOver;
+    if (base == 0) { finishBall(); return; }
+    bonusTotal = base * (uint32_t)mult;
+    bonusShown = 0;
+    bonusActive = true;
+    bonusFast = false;
+    bonusStep = -1;
+    bonusT = 0.6f;  // a beat after the drain before the first line
+    say("BONUS", 0.8f);
+  }
+
+  PB_NOINLINE void updateBonus(float dt) {
+    BonusLine L[4];
+    int n = bonusLines(L);
+    float step = bonusFast ? 0.08f : BONUS_STEP_S;
+    // lines: 0..n-1 items, n multiplier (only if > 1x), n+1 total count-up
+    if (bonusStep == n + 1) {
+      // count the total into the score, ~1 s (instantly when hurried)
+      uint32_t left = bonusTotal - bonusShown;
+      uint32_t chunk = bonusFast ? left : (bonusTotal / 40 + 1);
+      if (chunk > left) chunk = left;
+      if ((bonusT -= dt) <= 0 || bonusFast) {
+        bonusT = 0.025f;
+        bonusShown += chunk;
+        score += chunk;
+        markHud();
+        events |= EV_BONUS_TICK;
+        char b[24], v[16];
+        fmtNum(v, sizeof v, bonusShown);
+        snprintf(b, sizeof b, "+%s", v);
+        say(b, 5);
+        if (bonusShown >= bonusTotal) {
+          bonusStep++;
+          bonusT = bonusFast ? 0.3f : 1.0f;
+        }
+      }
+      return;
+    }
+    if ((bonusT -= dt) > 0) return;
+    bonusT = step;
+    bonusStep++;
+    if (bonusStep == n && mult <= 1) bonusStep++;  // no multiplier line at 1x
+    char b[28], v[16];
+    if (bonusStep < n) {
+      fmtNum(v, sizeof v, L[bonusStep].count * L[bonusStep].each);
+      snprintf(b, sizeof b, "%u %s  %s", (unsigned)L[bonusStep].count, L[bonusStep].what, v);
+      say(b, 5);
+      events |= EV_BONUS_LINE;
+    } else if (bonusStep == n) {
+      snprintf(b, sizeof b, "BONUS x%d", mult);
+      say(b, 5);
+      events |= EV_BONUS_LINE;
+    } else if (bonusStep == n + 1) {
+      bonusT = 0;  // count-up starts now
+    } else {
+      bonusActive = false;
+      msg[0] = 0;
+      msgT = 0;
+      markMsg();
+      finishBall();
+    }
+  }
+
+  static void fmtNum(char* out, size_t n, uint32_t v) {
+    char tmp[16];
+    int len = snprintf(tmp, sizeof tmp, "%lu", (unsigned long)v);
+    size_t o = 0;
+    for (int i = 0; i < len && o + 1 < n; i++) {
+      out[o++] = tmp[i];
+      int rem = len - 1 - i;
+      if (rem > 0 && rem % 3 == 0 && o + 1 < n) out[o++] = ',';
+    }
+    out[o] = 0;
+  }
+
+  // the bonus is done (or there was none): next ball, or the game is over
+  void finishBall() {
+    resetBallCounts();
+    if (bonusThenOver) {
       if (demo) { endDemo(); return; }
-      endMultiball(false);
       state = GAMEOVER;
       stateT = 0;
       if (score > hiscore) hiscore = score;

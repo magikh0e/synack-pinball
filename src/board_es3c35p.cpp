@@ -51,7 +51,8 @@ constexpr uint32_t TOUCH_POLL_MS = 8, TOUCH_HOLD_MS = 60;
 // ---- audio: ES8311 on the same I2C bus, I2S out, amplifier enable active LOW
 constexpr int I2S_MCK = 17, I2S_BCK = 18, I2S_WS = 21, I2S_DOUT = 15, AMP_EN = 1;
 constexpr int SAMPLE_RATE = 16000;
-constexpr int16_t TONE_AMP = 2200;  // square wave amplitude (of 32767)
+constexpr float AMP[4] = {0, 1100, 2200, 4400};  // per volume level (of 32767)
+constexpr int BL_CH = 1;  // LEDC channel for the backlight PWM
 constexpr int CODEC_VOLUME = 70;    // 0..100
 
 constexpr int PIN_LED = 40;
@@ -64,7 +65,16 @@ board::Touch held[board::MAX_TOUCH];
 int heldN = 0;
 uint32_t lastPoll = 0, lastFresh = 0;
 
-volatile uint16_t toneHz = 0;
+// the note the synth is playing; gen bumps on every new note
+struct NoteCmd {
+  uint16_t hz, toHz, ms;
+  uint8_t wave;
+};
+NoteCmd note = {0, 0, 0, 0};
+volatile uint32_t noteGen = 0;
+portMUX_TYPE noteMux = portMUX_INITIALIZER_UNLOCKED;
+volatile uint8_t volume = 2;
+uint8_t brightness = 255;
 bool audioOk = false;
 
 uint16_t* shadow = nullptr;  // PSRAM copy of the screen, for screenshots
@@ -119,19 +129,55 @@ int touchPoll(board::Touch* pts) {
   return n;
 }
 
+// A one-voice synth: square / 25% pulse / triangle / saw / noise, a linear
+// pitch sweep, a 3 ms attack and an exponential decay (a struck sound, not
+// an organ). Silence fades out rather than cutting, so there are no clicks.
 void audioTask(void*) {
   int16_t buf[128 * 2];
-  uint32_t phase = 0;
+  float phase = 0, env = 0, decay = 1, sweep = 0, freq = 0, lfsrOut = 0;
+  uint32_t gen = 0, elapsed = 0, len = 1;
+  uint16_t lfsr = 0xACE1;
+  NoteCmd n = {0, 0, 0, 0};
   for (;;) {
-    uint16_t hz = toneHz;
-    uint32_t inc = (uint32_t)((uint64_t)hz * 4294967296ULL / SAMPLE_RATE);
+    if (gen != noteGen) {
+      portENTER_CRITICAL(&noteMux);
+      n = note;
+      gen = noteGen;
+      portEXIT_CRITICAL(&noteMux);
+      elapsed = 0;
+      len = n.ms ? (uint32_t)n.ms * SAMPLE_RATE / 1000 : SAMPLE_RATE;  // untimed: 1 s
+      decay = expf(-1.0f / (len * 0.55f));
+      freq = n.hz;
+      sweep = n.toHz ? ((float)n.toHz - n.hz) / len : 0;
+    }
+    float amp = AMP[volume];
     for (int i = 0; i < 128; i++) {
-      int16_t s = 0;
-      if (hz) {
-        phase += inc;
-        s = (phase & 0x80000000u) ? TONE_AMP : -TONE_AMP;
+      float s = 0;
+      if (n.hz && elapsed < len) {
+        float a = elapsed < SAMPLE_RATE * 3 / 1000 ? 1.0f : env * decay;  // attack, then decay
+        env = elapsed < SAMPLE_RATE * 3 / 1000 ? (float)elapsed / (SAMPLE_RATE * 3 / 1000) : a;
+        phase += freq / SAMPLE_RATE;
+        if (phase >= 1) {
+          phase -= 1;
+          lfsr = (lfsr >> 1) ^ (-(lfsr & 1u) & 0xB400u);  // new noise value per cycle
+          lfsrOut = (lfsr & 1) ? 1.0f : -1.0f;
+        }
+        switch (n.wave) {
+          case board::W_PULSE: s = phase < 0.25f ? 1 : -1; break;
+          case board::W_TRI:   s = 4 * fabsf(phase - 0.5f) - 1; break;
+          case board::W_SAW:   s = 2 * phase - 1; break;
+          case board::W_NOISE: s = lfsrOut; break;
+          default:             s = phase < 0.5f ? 1 : -1; break;
+        }
+        s *= env;
+        freq += sweep;
+        elapsed++;
+      } else {
+        env *= 0.995f;  // release
+        s = 0;
       }
-      buf[2 * i] = buf[2 * i + 1] = s;
+      int16_t v = (int16_t)(s * amp);
+      buf[2 * i] = buf[2 * i + 1] = v;
     }
     size_t wrote;
     i2s_write(I2S_NUM_0, buf, sizeof buf, &wrote, portMAX_DELAY);
@@ -181,6 +227,8 @@ namespace board {
 const char* const NAME = "ES3C35P (ESP32-S3)";
 const bool MULTITOUCH = true;
 const int ALIGN_X = 4;  // ST77922 CASET: XS and width must be multiples of 4
+const uint8_t DEFAULT_VOLUME = 2;
+const uint8_t BRIGHT_FULL = 255;
 
 bool init() {
   pinMode(PIN_BTN_LEFT, INPUT_PULLUP);  // takes IO43/44 back from UART0
@@ -213,7 +261,10 @@ void pushRect(int x, int y, int w, int h, uint16_t* px) {
 
 void endFrame() {
   if (!lit) {  // first full frame is on the panel: now light it
-    St77922::backlight(true);
+    // backlight on PWM (vendor Example_14), lit once a whole frame is there
+    ledcSetup(BL_CH, 5000, 8);
+    ledcAttachPin(ST77922_BL, BL_CH);
+    ledcWrite(BL_CH, brightness);
     lit = true;
   }
 }
@@ -240,7 +291,18 @@ bool btnLeft() { return digitalRead(PIN_BTN_LEFT) == LOW; }
 bool btnRight() { return digitalRead(PIN_BTN_RIGHT) == LOW; }
 bool btnLaunch() { return digitalRead(PIN_BTN_LAUNCH) == LOW; }
 
-void tone(uint16_t hz) { toneHz = hz; }
+void tone(uint16_t hz, uint8_t wave, uint16_t toHz, uint16_t ms) {
+  portENTER_CRITICAL(&noteMux);
+  note = {hz, toHz, ms, wave};
+  noteGen = noteGen + 1;
+  portEXIT_CRITICAL(&noteMux);
+}
+void setVolume(uint8_t level) { volume = level < VOLUME_LEVELS ? level : VOLUME_LEVELS - 1; }
+
+void setBrightness(uint8_t v) {
+  brightness = v;
+  if (lit) ledcWrite(BL_CH, v);
+}
 
 void led(bool r, bool g, bool b) {
   pixel.setPixelColor(0, pixel.Color(r ? 255 : 0, g ? 255 : 0, b ? 255 : 0, 0));

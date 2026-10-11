@@ -39,7 +39,17 @@ bool btnLeft();
 bool btnRight();
 bool btnLaunch();
 
-void tone(uint16_t hz);  // square-ish beep, 0 = silence
+// Sound: one voice. A note starts at hz, optionally sweeps to toHz over ms,
+// and fades like a struck sound. Boards play what they can: the ES3C35P
+// synthesizes every waveform; the CYD's buzzer plays a square at hz.
+enum Wave : uint8_t { W_SQUARE, W_PULSE, W_TRI, W_SAW, W_NOISE };
+void tone(uint16_t hz, uint8_t wave = W_SQUARE, uint16_t toHz = 0, uint16_t ms = 0);
+constexpr int VOLUME_LEVELS = 4;  // 0 off, 1 low, 2 medium, 3 high
+extern const uint8_t DEFAULT_VOLUME;
+void setVolume(uint8_t level);
+
+extern const uint8_t BRIGHT_FULL;  // the board's normal backlight level
+void setBrightness(uint8_t v);     // 0 = off
 void led(bool r, bool g, bool b);
 
 // screenshot support: one screen row as RGB888, and the serial speed the

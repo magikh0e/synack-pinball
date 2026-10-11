@@ -203,6 +203,7 @@ static void soak(HostCanvas& cv, int balls) {
   printf("  drains: left outlane %ld  centre %ld  right outlane %ld\n", outL, centre, outR);
   printf("  bumper %u  sling %u  target %u  lane %u  nudges %u  kickbacks %u  spins %u  escapes %ld\n",
          g.nBumper, g.nSling, g.nTarget, g.nLane, g.nNudge, g.nKick, g.nSpin, escapes);
+  printf("  flipper hits (sound events) %u\n", g.nFlipHit);
   printf("  ramp: entered %u, completed %u, ride avg %.2fs max %.2fs\n", g.nRampIn, g.nRamp,
          g.nRamp ? g.rampRideSum / g.nRamp : 0.0f, g.rampRideMax);
   printf("  multiballs %u  (%.1f%% of play time, max %ld balls live)\n", g.nMulti,
@@ -309,6 +310,64 @@ static void testDemo() {
          g.state == PLAY ? "PLAY" : "other", g.demo, g.score, g.ball);
 }
 
+// bonus: drain with known counts and check the count-up adds exactly
+// (counts x values) x multiplier, then serves the next ball; and that a
+// press fast-forwards it
+static void testBonus() {
+  printf("== end-of-ball bonus ==\n");
+  for (int fast = 0; fast < 2; fast++) {
+    Game g;
+    g.startGame();
+    B(g).p = {148, 300};
+    B(g).v = {0, 0};
+    g.everLeftLane = true;
+    g.saveT = 0;
+    g.ballRamps = 2; g.ballLanes = 3; g.ballTargets = 1; g.ballSpins = 10;
+    g.mult = 3;
+    uint32_t expect = (2 * BONUS_RAMP + 3 * BONUS_LANE + 1 * BONUS_TARGET + 10 * BONUS_SPIN) * 3;
+    // let it fall straight down the middle and drain
+    int f = 0;
+    while (!g.bonusActive && f++ < 600) { g.frame(1 / 60.f, {false, false, false}); g.ndirty = 0; }
+    uint32_t s0 = g.score;
+    float t = 0;
+    while (g.bonusActive && t < 30) {
+      g.frame(1 / 60.f, {fast && t > 0.7f, false, false});
+      g.ndirty = 0;
+      t += 1 / 60.f;
+    }
+    printf("  %s: bonus %u (expected %u) in %.1fs, now ball %d, live %d, mult %d\n",
+           fast ? "hurried" : "normal ", g.score - s0, expect, t, g.ball, g.liveCount(), g.mult);
+  }
+}
+
+// rolling: drop a ball gently onto the lowered left flipper near the pivot
+// and onto the left inlane guide, and time how long it takes to roll off
+static void testRoll() {
+  printf("== rolling speed ==\n");
+  struct Case { const char* what; V start; } cases[] = {
+      {"left flipper, from the pivot", {FLIP_PIV_L.x + 4, FLIP_PIV_L.y - 16}},
+      {"left inlane guide, from the top", {36, 372}},
+  };
+  for (auto& c : cases) {
+    Game g;
+    g.startGame();
+    B(g).p = c.start;
+    B(g).v = {0, 0};
+    g.everLeftLane = true;
+    float t = 0, maxV = 0, sumV = 0;
+    int n = 0;
+    while (t < 6 && B(g).live && B(g).p.y < 445) {
+      g.frame(1 / 60.f, {false, false, false});
+      g.ndirty = 0;
+      t += 1 / 60.f;
+      float v = len(B(g).v);
+      maxV = fmaxf(maxV, v);
+      sumV += v; n++;
+    }
+    printf("  %-34s %.2fs to leave, avg %.0f px/s, max %.0f px/s\n", c.what, t, sumV / n, maxV);
+  }
+}
+
 int main() {
   HostCanvas cv;
   Game g;
@@ -322,6 +381,8 @@ int main() {
   testFlipperShot(cv);
   soak(cv, 600);
   testMultiball();
+  testBonus();
+  testRoll();
   testDemo();
   testDirtyConsistency();
   cv.save("table.ppm");

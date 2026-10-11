@@ -40,6 +40,8 @@ namespace board {
 const char* const NAME = "CYD 3.5 (ESP32-3248S035R)";
 const bool MULTITOUCH = false;
 const int ALIGN_X = 1;
+const uint8_t DEFAULT_VOLUME = 3;  // the buzzer's full 50% duty, as before
+const uint8_t BRIGHT_FULL = 220;
 
 bool init() {
   pinMode(PIN_RGB_R, OUTPUT);
@@ -57,7 +59,7 @@ bool init() {
   uint16_t cal[8];
   memcpy(cal, TOUCH_CAL, sizeof cal);
   tft.setTouchCalibrate(cal);
-  tft.setBrightness(220);
+  tft.setBrightness(BRIGHT_FULL);
   return true;
 }
 
@@ -79,7 +81,17 @@ bool btnLeft() { return pressed(PIN_BTN_LEFT); }
 bool btnRight() { return pressed(PIN_BTN_RIGHT); }
 bool btnLaunch() { return pressed(PIN_BTN_LAUNCH); }
 
-void tone(uint16_t hz) { ledcWriteTone(SPK_CH, hz); }
+// volume is the PWM duty (of 1023): a buzzer has no other volume control
+static const uint16_t DUTY[VOLUME_LEVELS] = {0, 40, 160, 511};
+static uint8_t volume = 3;
+
+void tone(uint16_t hz, uint8_t, uint16_t, uint16_t) {
+  ledcWriteTone(SPK_CH, hz);  // sets 10-bit resolution at 50% duty
+  if (hz) ledcWrite(SPK_CH, DUTY[volume]);
+}
+void setVolume(uint8_t level) { volume = level < VOLUME_LEVELS ? level : VOLUME_LEVELS - 1; }
+
+void setBrightness(uint8_t v) { tft.setBrightness(v); }
 
 void led(bool r, bool g, bool b) {
   digitalWrite(PIN_RGB_R, r ? LOW : HIGH);  // common anode: LOW = on

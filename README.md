@@ -41,11 +41,26 @@ thumb on each side lands in the middle zone and fires both flippers.
 - **Spinner** in the left orbit lane: 100 per half turn, doubled (and the plate
   turns magenta) while SYN is armed.
 - Pop bumpers 100, slingshots 10. The high score is kept in NVS.
+- **End-of-ball bonus:** each ramp 1,000, lane 250, target 250 and spinner
+  half-turn 25, times the multiplier, counted into the score after every
+  drain. Any press hurries it along.
+- **Blinking lamps** mark the shot that matters: the A/C/K targets (and the
+  spinner arrow) once SYN is armed, the ramp arrow while the jackpot is lit,
+  and SHOOT AGAIN for the last 2 s of a ball save.
 
 **Attract mode:** after 15 s idle on the title or game-over screen the table
 plays itself (silently, never touching the high score) with **DEMO · TAP TO
 PLAY** in the top bar. Any tap starts a real game; a demo returns to the title
 when it ends or after 90 s.
+
+**Volume:** off the table (title, game over, demo) hold **BOOT** for a second
+to cycle off / low / medium / high; a short press still starts a game. Kept in
+NVS. The ES3C35P synthesizes its sounds (square, pulse, triangle, saw, noise,
+pitch sweeps); the CYD's buzzer plays the same tunes as plain beeps.
+
+**Idle:** after 2 minutes with no touch or button the backlight dims, and after
+10 minutes it goes dark and stops drawing. Any touch wakes it (that touch is
+ignored, so it doesn't also start a game).
 
 ## Build
 
