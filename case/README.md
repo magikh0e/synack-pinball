@@ -4,7 +4,7 @@
 
 A small pinball cabinet for the LCDwiki ES3C35P: the screen lies on a 30° deck,
 with a backbox and marquee above it, 24 mm arcade buttons on the sides for the
-flippers, and a launch button on the front. 92 × 136 × 170 mm.
+flippers, and a launch button on the front. 92 × 136 × 166 mm.
 
 The board mounts **upside down**: its USB-C, RESET and BOOT end faces the back
 of the cabinet. That keeps the speaker socket next to the backbox and the
@@ -21,7 +21,7 @@ pio run -e es3c35p-cabinet -t upload --upload-port COM6
 |---|---|---|---|
 | Body | `stl/body.stl` | upright, floor down | walls, button holes, deck bosses, USB-C panel socket |
 | Deck | `stl/deck.stl` | face down | screen window with a chamfered edge; board standoffs face up |
-| Backbox | `stl/backbox.stl` | on its back | marquee window, speaker grille and pocket |
+| Backbox | `stl/backbox.stl` | upside down (top on the bed, open bottom up) | marquee window and card slot, speaker grille and shelf; the window bridges 70 mm, so turn bridging on |
 | Marquee | `stl/marquee.stl` | flat | the SYN/ACK card; print the text in a second colour if you can |
 
 None of them need supports. 0.2 mm layers and 3 walls are plenty; PETG or PLA.
@@ -36,8 +36,9 @@ LAUNCH_BTN=24 sh export.sh    # a third 24 mm arcade button for launch
 Rendering the model also prints its fit checks: the gap between the two facing
 flipper buttons, and the launch button's clearance. A change that makes the
 parts collide fails with an assertion instead of exporting. `PART="clash"`
-renders the USB-C plug and socket against every printed part, and it must come
-out empty ("Current top level object is empty").
+renders the USB-C plug and socket, the speaker and the marquee card (in place,
+and on their way in) against the printed parts, and it must come out empty
+("Current top level object is empty").
 
 ## Hardware
 
@@ -77,10 +78,13 @@ the deck goes in **before** the backbox.
 6. Lower the deck in, guiding the USB-C plug's tail and the speaker lead up
    through the opening in the body's top behind the deck. Coil the spare USB
    cable at the bottom of the body. Screw the deck down.
-7. Slide the marquee card up into its rails from the open bottom of the
-   backbox, and push the speaker into its pocket behind the grille (a dot
-   of hot glue holds it).
+7. Slide the speaker up into the backbox from its open bottom, face against
+   the grille, until it stops under the shelf. Centre it on the grille and run
+   a bead of hot glue along its sides to hold it.
 8. Push the backbox's pegs into the body.
+9. Drop the marquee card into the slot in the backbox's top, text facing out;
+   it stands on the shelf behind the window. To take it out, lift the backbox
+   off and tip it over.
 
 ## Wiring
 
