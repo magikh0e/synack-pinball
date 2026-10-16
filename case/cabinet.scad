@@ -94,7 +94,7 @@ SHELF_T = 1.6;
 // the shelf across the inside of the front wall: the speaker slides up from
 // below until it stops under it, and the marquee card stands on top of it
 SHELF_Z = SPK_Z0 + 1.6 + SPK_H + SHELF_T;   // top of the shelf
-SLOT_D = CARD_T + 0.8 + 0.3;                // the card's channel, front to back
+SLOT_D = CARD_T + 0.8 + 0.8;                // the card and its raised text, with printing play
 // tall enough for the speaker with the marquee card above it
 BB_H = ceil(SHELF_Z + CARD_H + 0.5 + BB_WALL);
 PEG_D = 5;    PEG_L = 5;
@@ -250,7 +250,7 @@ module backbox() {
     // marquee window, centred on the card
     translate([W / 2 - MARQ_W / 2, -eps, SHELF_Z + (CARD_H - MARQ_H) / 2]) cube([MARQ_W, BB_WALL + 2 * eps, MARQ_H]);
     // the card drops in through a slot in the top
-    translate([W / 2 - CARD_W / 2 - 0.3, BB_WALL - eps, SHELF_Z]) cube([CARD_W + 0.6, SLOT_D + eps, BB_H - SHELF_Z + eps]);
+    translate([W / 2 - CARD_W / 2 - 0.6, BB_WALL - eps, SHELF_Z]) cube([CARD_W + 1.2, SLOT_D + eps, BB_H - SHELF_Z + eps]);
     // speaker grille: a field of 1.8 mm holes over the speaker's face
     for (gx = [-(SPK_W / 2 - 5) : 3.4 : SPK_W / 2 - 5], gz = [-(SPK_H / 2 - 5) : 3.4 : SPK_H / 2 - 5])
       translate([W / 2 + gx, -eps, SPK_Z0 + 1.6 + SPK_H / 2 + gz]) rotate([-90, 0, 0]) cylinder(d = 1.8, h = BB_WALL + 2 * eps, $fn = 16);
