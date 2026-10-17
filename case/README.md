@@ -1,5 +1,7 @@
 # Tabletop cabinet (ES3C35P)
 
+<img src="../docs/cabinet.jpg" alt="the printed cabinet running the demo" width="360">
+
 ![assembly](renders/assembly.png) ![cutaway](renders/section.png)
 
 A small pinball cabinet for the LCDwiki ES3C35P: the screen lies on a 30° deck,
@@ -51,7 +53,9 @@ and on their way in) against the printed parts, and it must come out empty
 | 4 | M3 × 6 screws (board to deck) |
 | 4 | M3 × 8 countersunk screws (deck to body) |
 | 4 | 10 mm rubber feet |
+| 2 | NPN transistors (2N2222, 2N3904…) and 2 × 1 kΩ, if the flipper buttons have 5 V LEDs |
 | 1 | USB-C panel-mount extension, 30 cm: female socket with a two-screw flange, straight male plug (comes with M3 × 11 screws) |
+| 1 | 90° USB-C adapter, male to female, socket on the broad face (12 mm body, 7.1 mm rise) |
 
 The board's speaker and button sockets are 1.25 mm. JST GH and MX1.25
 (PicoBlade) are both 1.25 mm and don't mate, so test-fit a plug before buying
@@ -59,8 +63,8 @@ a batch.
 
 ## Assembly
 
-The board's USB-C plug sticks up past the end of the deck into the backbox, so
-the deck goes in **before** the backbox.
+The deck goes in **before** the backbox: the speaker lead runs up from the
+board through the body's top, behind the deck.
 
 1. Press the M3 inserts into the deck's four board standoffs and the body's
    four deck bosses.
@@ -73,11 +77,16 @@ the deck goes in **before** the backbox.
    spacing, so the holes are slots covering 18–22 mm; measure yours, and if it
    falls outside that, change `USBC_SPACING_MIN/MAX` and re-export. If the
    flange holes aren't threaded, add M3 nuts inside.
-5. Plug the extension's male end into the board, and plug the speaker lead into
-   the board's speaker socket. Wire the buttons (below).
-6. Lower the deck in, guiding the USB-C plug's tail and the speaker lead up
-   through the opening in the body's top behind the deck. Coil the spare USB
-   cable at the bottom of the body. Screw the deck down.
+5. Plug the 90° adapter into the board, socket facing **away from the
+   screen** (USB-C goes in either way up, so turn it over if it faces the
+   glass), and plug the extension's male end into it. The plug then points
+   down toward the back wall, and the cable runs down the wall to the socket
+   in one loose loop; without the adapter it has to double back hard inside
+   the backbox. Plug the speaker lead into the board's speaker socket, and
+   wire the buttons (below).
+6. Lower the deck in, guiding the speaker lead up through the opening in the
+   body's top behind the deck. Coil the spare USB cable at the bottom of the
+   body. Screw the deck down.
 7. Slide the speaker up into the backbox from its open bottom, face against
    the grille, until it stops under the shelf. Centre it on the grille and run
    a bead of hot glue along its sides to hold it.
@@ -90,10 +99,12 @@ the deck goes in **before** the backbox.
 
 | From | To |
 |---|---|
-| Left flipper button | IO43 (serial socket pin 3) and GND (pin 1) |
-| Right flipper button | IO44 (serial socket pin 4) and GND (pin 1) |
+| Left flipper button | serial socket (`UART`) TXD, pin 3, and GND, pin 2 |
+| Right flipper button | serial socket (`UART`) RXD, pin 4, and GND, pin 2 |
 | Launch button | across the board's BOOT switch (GPIO 0 and GND) |
 | Speaker | the board's 2-pin speaker socket |
+| Flipper button lamps (LED buttons) | through a transistor each from IO45 (left) and IO46 (right) on the expansion socket; see [lit flipper buttons](../README.md#physical-buttons) |
 
-Leave the serial socket's pin 2 alone: it carries power. Don't hold the launch
-button while the board powers up or resets, because it then starts in flashing mode.
+The serial socket's pin 1 (marked with a triangle, labelled 5V) is power:
+never wire a button to it. Don't hold the launch button while the board powers
+up or resets, because it then starts in flashing mode.

@@ -116,6 +116,8 @@ schematic, ST77922 specification and example code.
 
 ## Cabinet
 
+<img src="docs/cabinet.jpg" alt="the printed cabinet running the demo" width="360">
+
 [`case/`](case/README.md) has a printable tabletop cabinet for the ES3C35P (OpenSCAD, with
 ready STLs): a 30° deck, a backbox with marquee and speaker, and arcade buttons on
 the sides. It uses the `es3c35p-cabinet` firmware build, which turns the image
@@ -139,13 +141,36 @@ board ships with a 1.25 mm to 2.54 mm adapter cable):
 
 | Button | Pin | Where |
 |---|---|---|
-| Left flipper | IO43 | serial header pin 3 (TXD0) |
-| Right flipper | IO44 | serial header pin 4 (RXD0) |
+| Left flipper | IO43 | serial header **TXD** (pin 3) |
+| Right flipper | IO44 | serial header **RXD** (pin 4) |
 | Launch | GPIO 0 | the board's **BOOT** button |
-| (common) | GND | serial header pin 1 (pin 2 is power: leave it alone) |
+| (common) | GND | serial header **GND** (pin 2) |
+
+The header is silkscreened `UART` with `RXD TXD GND 5V`; pin 1 (the triangle)
+is **5V**, so never put a button on it.
 
 Don't hold the left button while the ES3C35P resets: the ROM prints its boot
 log on IO43.
+
+**Lit flipper buttons (ES3C35P):** 5 V LED arcade buttons light up with the
+game: they glow during play, flare while pressed, flash on multiball, jackpots
+and drains, and breathe in turn on the title screen and in the demo. Each
+lamp is switched by an NPN transistor (2N2222, 2N3904 or similar) from the
+expansion socket (P3, 1.25 mm 4-pin):
+
+| From | To |
+|---|---|
+| IO45 (expansion pin 4) | 1 kΩ, then the left lamp's transistor base |
+| IO46 (expansion pin 3) | 1 kΩ, then the right lamp's transistor base |
+| both emitters | GND (expansion pin 2) |
+| each lamp's − | its transistor's collector |
+| each lamp's + | 5V (serial header pin 1) |
+
+The expansion socket is silkscreened `IO45 IO46 GND 3.3V`; its pin 1 (the
+triangle) is 3.3V and isn't used. IO45 and IO46 must be low when the board
+starts; a transistor base keeps them there, but a lamp wired straight to the
+pin could stop it booting.
+On the CYD the lamps aren't driven.
 
 Any button press also starts a game or leaves the demo. Don't hold BOOT while
 the board resets (it enters flash mode). Pins are set at the top of `main.cpp`.

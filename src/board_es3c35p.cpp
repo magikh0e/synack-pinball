@@ -16,17 +16,22 @@
 // and the vendor's touch library agrees: reset 48, interrupt 47.
 //
 // Flipper buttons go on the serial-port header (the vendor spec's "1.25mm
-// 4P socket", P2 on the schematic): pin 1 GND, pin 3 TXD0 = IO43 (left),
-// pin 4 RXD0 = IO44 (right), each through a 100R series resistor on the
-// board. Pin 2 is power; leave it alone. This build's console is native USB,
-// so UART0 is idle and the IO table allows those two as plain IO. Each button
-// is a momentary switch from its pin to GND; internal pull-ups, so unwired
+// 4P socket", silkscreened UART, P2 on the schematic). Per the silkscreen in
+// the vendor's outline drawing: pin 1 (triangle) 5V, pin 2 GND, pin 3 TXD =
+// IO43 (left), pin 4 RXD = IO44 (right), each through a 100R series resistor
+// on the board. Never wire a button to pin 1: that's 5 V. This build's
+// console is native USB, so UART0 is idle and the IO table allows those two
+// as plain IO. Each button is a momentary switch from its pin to GND; internal pull-ups, so unwired
 // pins read "not pressed". Touch keeps working alongside the buttons.
 //   - The ROM prints its boot log on IO43, so don't hold the left button
 //     while the board resets (the 100R limits the current if you do).
 //   - IO45/46 on the expansion header are free too, but they're strapping
 //     pins (IO45 picks the flash voltage at reset), so a pull-up there could
-//     stop the board booting.
+//     stop the board booting. They drive the flipper buttons' lamps instead:
+//     the expansion socket (P3, silkscreened IO45 IO46 GND 3.3V) is pin 1
+//     3.3V, pin 2 GND, pin 3 IO46 (right lamp), pin 4 IO45 (left lamp). Each pin switches its 5 V lamp through an NPN
+//     transistor (1k into the base), so the pin only ever sees a base, which
+//     leaves it low at reset as the straps need.
 
 #include <Arduino.h>
 #if defined(BOARD_ES3C35P)
@@ -67,6 +72,8 @@ constexpr int PIN_LED = 40;
 constexpr int PIN_BTN_LEFT = 43;   // serial header pin 3 (TXD0)
 constexpr int PIN_BTN_RIGHT = 44;  // serial header pin 4 (RXD0)
 constexpr int PIN_BTN_LAUNCH = 0;  // BOOT
+constexpr int PIN_LAMP_LEFT = 45, PIN_LAMP_RIGHT = 46;  // expansion socket pins 4 / 3
+constexpr int LAMP_CH_LEFT = 2, LAMP_CH_RIGHT = 3;     // LEDC channels (backlight is 1)
 
 uint8_t maxPoints = 0;
 board::Touch held[board::MAX_TOUCH];
@@ -253,6 +260,11 @@ bool init() {
   pixel.begin();
   pixel.setBrightness(60);
   led(false, false, false);
+  ledcSetup(LAMP_CH_LEFT, 5000, 8);
+  ledcSetup(LAMP_CH_RIGHT, 5000, 8);
+  ledcAttachPin(PIN_LAMP_LEFT, LAMP_CH_LEFT);
+  ledcAttachPin(PIN_LAMP_RIGHT, LAMP_CH_RIGHT);
+  buttonLamps(0, 0);
 
   shadow = (uint16_t*)ps_malloc(320 * 480 * 2);
   if (!St77922::begin()) return false;
@@ -340,6 +352,11 @@ void setBrightness(uint8_t v) {
 void led(bool r, bool g, bool b) {
   pixel.setPixelColor(0, pixel.Color(r ? 255 : 0, g ? 255 : 0, b ? 255 : 0, 0));
   pixel.show();
+}
+
+void buttonLamps(uint8_t left, uint8_t right) {
+  ledcWrite(LAMP_CH_LEFT, left);
+  ledcWrite(LAMP_CH_RIGHT, right);
 }
 
 void readRowRGB(int y, uint8_t* rgb) {

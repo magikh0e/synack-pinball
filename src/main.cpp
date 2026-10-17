@@ -229,6 +229,38 @@ void ledUpdate() {
   if (ledUntil && millis() > ledUntil) { led(false, false, false, 0); ledUntil = 0; }
 }
 
+// ---------------------------------------------------------------- button lamps
+// The cabinet's LED flipper buttons. On the table they glow, flare while
+// pressed and flash on the big moments; off it (title, demo, game over) they
+// breathe in turn, asking to be pressed.
+float lampLvl[2] = {0, 0};
+uint32_t lampFlashUntil = 0;
+uint16_t lampFlashMs = 1;  // half of one on/off cycle
+void lampFlash(uint32_t ms, uint16_t half) {
+  lampFlashUntil = millis() + ms;
+  lampFlashMs = half;
+}
+void lampsUpdate(const pb::Input& in, float dt, bool dimmed) {
+  uint32_t t = millis();
+  float out[2];
+  if (game.state != pb::PLAY || game.demo) {
+    float s = sinf(t * (2 * PI / 2400.0f));
+    float k = dimmed ? 0.3f : 1.0f;
+    out[0] = k * (0.5f + 0.5f * s);
+    out[1] = k * (0.5f - 0.5f * s);
+    lampFlashUntil = 0;
+  } else {
+    bool press[2] = {in.left, in.right};
+    for (int i = 0; i < 2; i++) {
+      lampLvl[i] = press[i] ? 1.0f : fmaxf(0.25f, lampLvl[i] - dt * 3);  // fade back to a glow
+      out[i] = lampLvl[i];
+    }
+    if (t < lampFlashUntil) out[0] = out[1] = (t / lampFlashMs) % 2 ? 0.0f : 1.0f;
+  }
+  // squared, so the fades look even to the eye
+  board::buttonLamps((uint8_t)(out[0] * out[0] * 255), (uint8_t)(out[1] * out[1] * 255));
+}
+
 // Sound design. On the ES3C35P every field is heard; the CYD's buzzer plays
 // the start pitch of each note as a square wave.
 void handleEvents(uint32_t ev) {
@@ -239,29 +271,35 @@ void handleEvents(uint32_t ev) {
              {784, 60, W_PULSE}, {1047, 60, W_PULSE}, {1568, 90, W_PULSE}, {1319, 90, W_PULSE},
              {1568, 90, W_PULSE}, {2093, 400, W_SAW, 2600}});
     led(true, false, true, 1500);
+    lampFlash(1500, 70);
   } else if (ev & EV_EXTRA) {
     sfx(9, {{392, 80, W_PULSE}, {523, 80, W_PULSE}, {659, 80, W_PULSE}, {784, 80, W_PULSE},
             {1047, 120, W_PULSE}, {784, 80, W_PULSE}, {1047, 500, W_SAW, 1568}});
     led(true, true, true, 1200);
+    lampFlash(1200, 60);
   } else if (ev & EV_JACKPOT) {
     sfx(9, {{523, 70, W_PULSE}, {659, 70, W_PULSE}, {784, 70, W_PULSE}, {1047, 120, W_PULSE},
             {784, 60, W_PULSE}, {1047, 60, W_PULSE}, {1319, 350, W_SAW, 1760}});
     led(true, true, true, 900);
+    lampFlash(900, 60);
   } else if (ev & EV_GAMEOVER) {
     sfx(8, {{392, 200, W_TRI}, {330, 200, W_TRI}, {262, 200, W_TRI}, {196, 700, W_SAW, 98}});
     led(true, false, false, 1200);
   } else if (ev & EV_DRAIN) {
     sfx(7, {{440, 650, W_SAW, 70}});
     led(true, false, false, 500);
+    lampFlash(1000, 250);
   } else if (ev & (EV_SAVE | EV_KICKBACK)) {
     sfx(6, {{880, 70, W_TRI}, {1175, 70, W_TRI}, {1760, 160, W_TRI}});
     led(false, true, false, 400);
+    lampFlash(400, 100);
   } else if (ev & (EV_SYN | EV_ACK)) {
     sfx(5, {{784, 60, W_PULSE}, {988, 60, W_PULSE}, {1175, 60, W_PULSE}, {1568, 200, W_PULSE}});
     led(true, true, false, 400);
   } else if (ev & EV_SKILL) {
     sfx(6, {{400, 220, W_SAW, 2000}, {2093, 90, W_TRI}, {2637, 160, W_TRI}});
     led(true, false, true, 400);
+    lampFlash(400, 50);
   } else if (ev & EV_RAMP) {
     sfx(5, {{300, 260, W_SAW, 1500}, {1760, 160, W_TRI}});
     led(false, true, true, 300);
@@ -473,6 +511,7 @@ void loop() {
     if (game.demo) game.endDemo();
     for (int v = 0; v < board::VOICES; v++) board::tone(v, 0);
     board::led(false, false, false);
+    board::buttonLamps(0, 0);
     board::setBrightness(0);
     Serial.println("[pinball] sleep");
     return;
@@ -530,6 +569,7 @@ void loop() {
   renderFrame();
   sfxUpdate();
   ledUpdate();
+  lampsUpdate(in, dt, power == DIMMED);
 
   frames++;
   if (millis() - fpsT >= 5000) {

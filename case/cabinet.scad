@@ -79,6 +79,13 @@ USBC_SPACING_MIN = 18;  USBC_SPACING_MAX = 22;
 USBC_Z = 16;
 PLUG_L = 33;  PLUG_W = 12;  PLUG_T = 7;
 PORT_N = -(3.7 + 1.6 + 1.6);   // board's USB-C centre, below the deck's underside
+// 90-degree USB-C adapter on the board's port (as ordered: 12 mm body, the
+// female socket on its broad face, 11 x 7.1 mm), turned so the extension's
+// plug points away from the screen, down into the body. false: the straight
+// plug goes straight into the port and up into the backbox (a tight bend).
+USBC_ELBOW = true;
+ELBOW_L = 12;  ELBOW_T = 6.5;  ELBOW_RISE = 7.1;  ELBOW_SOCK_W = 11;  ELBOW_SOCK_D = 7.5;
+PLUG_TIP = 6.5;   // the plug's metal tip, which goes inside the socket
 
 // backbox
 
@@ -267,7 +274,20 @@ module marquee() {
 // ---------------------------------------------------------------- board (for the assembly view)
 // the panel extension's straight male plug, seated in the board's port
 module usbc_plug() {
-  deck_frame() translate([W / 2 - PLUG_W / 2, BOARD_S0 + PCB_L - 1, PORT_N - PLUG_T / 2]) cube([PLUG_W, PLUG_L, PLUG_T]);
+  y_e = BOARD_S0 + PCB_L;   // the board's USB-C edge, along the deck
+  if (USBC_ELBOW) deck_frame() {
+    // the adapter: body out of the port, socket rising away from the screen
+    translate([W / 2 - 6, y_e, PORT_N - ELBOW_T / 2]) cube([12, ELBOW_L, ELBOW_T]);
+    translate([W / 2 - ELBOW_SOCK_W / 2, y_e + ELBOW_L - ELBOW_SOCK_D, PORT_N - ELBOW_T / 2 - ELBOW_RISE])
+      cube([ELBOW_SOCK_W, ELBOW_SOCK_D, ELBOW_RISE + eps]);
+    // the extension's straight plug in it, and the first 3 mm of cable out of
+    // its tail (the cable then bends down the back wall to the socket)
+    sy = y_e + ELBOW_L - ELBOW_SOCK_D / 2;
+    z0 = PORT_N - ELBOW_T / 2 - ELBOW_RISE;
+    translate([W / 2 - PLUG_W / 2, sy - PLUG_T / 2, z0 - (PLUG_L - PLUG_TIP)]) cube([PLUG_W, PLUG_T, PLUG_L - PLUG_TIP]);
+    translate([W / 2, sy, z0 - (PLUG_L - PLUG_TIP) - 3]) cylinder(d = 4, h = 3 + eps);
+  }
+  else deck_frame() translate([W / 2 - PLUG_W / 2, y_e - 1, PORT_N - PLUG_T / 2]) cube([PLUG_W, PLUG_L, PLUG_T]);
 }
 module usbc_socket() {   // the female end and flange, inside the back wall
   translate([W / 2 - 12.5, D - WALL - 3.05, USBC_Z - 4]) cube([25, 3, 8]);  // flush on the wall (0.05 gap for the clash test)

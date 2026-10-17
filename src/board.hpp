@@ -55,6 +55,9 @@ void setVolume(uint8_t level);
 extern const uint8_t BRIGHT_FULL;  // the board's normal backlight level
 void setBrightness(uint8_t v);     // 0 = off
 void led(bool r, bool g, bool b);
+// the flipper buttons' own lamps (LED arcade buttons), 0..255 each; boards
+// without them ignore this
+void buttonLamps(uint8_t left, uint8_t right);
 
 // screenshot support: one screen row as RGB888, and the serial speed the
 // row stream uses (a no-op over native USB, where baud means nothing)

@@ -110,6 +110,8 @@ void led(bool r, bool g, bool b) {
   digitalWrite(PIN_RGB_B, b ? LOW : HIGH);
 }
 
+void buttonLamps(uint8_t, uint8_t) {}  // no spare pins for them
+
 void readRowRGB(int y, uint8_t* rgb) { tft.readRectRGB(0, y, 320, 1, rgb); }
 
 void serialFast(bool on) {
