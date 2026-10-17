@@ -195,8 +195,8 @@ fire.
 
 <img src="guide/buttons.jpg" alt="a 16 mm metal push button with two tabs beside a red 24 mm arcade button with four tabs, front and back" width="640">
 
-*A 16 mm push button like the launch button (two tabs), and a 24 mm arcade
-button with an LED inside: four tabs, two for the switch and two for the lamp.
+*The launch button, a 16 mm push button (two tabs), and a flipper button, a
+24 mm arcade button with an LED inside (any colour works for either): four tabs, two for the switch and two for the lamp.
 The switch tabs come off the microswitch body; the lamp's come off the LED
 holder behind it.*
 
