@@ -19,6 +19,9 @@ one codebase:
 
 *The same game on both boards: the CYD on the left, the ES3C35P on the right.*
 
+How it was made, from the physics to the printed cabinet:
+[the making of SYN/ACK](docs/MAKING-OF.md).
+
 ## Play
 
 | Touch | Does |
