@@ -130,8 +130,14 @@ dropped to about 32 ms on the S3 and 35 ms on the CYD.
 
 The ES3C35P's first images came out sheared diagonally. The cause was in the
 ST77922's datasheet: the start column and the width of a drawing window must
-both be **multiples of 4**. Anything else is quietly misdrawn. The fix is to
-widen every rectangle to the next 4-pixel boundary before drawing:
+both be **multiples of 4**. Anything else is quietly misdrawn: each row lands a
+few pixels off from the one before, so every update smears into a diagonal
+staircase, worst wherever the ball has been.
+
+<img src="guide/smear.jpg" alt="the ES3C35P's screen with diagonal staircases of garbled pixels wherever the ball has moved" width="300">
+
+The fix is to widen every rectangle to the next 4-pixel boundary before
+drawing:
 
 ```cpp
 const int A = board::ALIGN_X;  // 4 on the ES3C35P, 1 on the CYD
