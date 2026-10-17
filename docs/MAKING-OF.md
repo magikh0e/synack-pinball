@@ -198,8 +198,8 @@ fire.
 *Left, the launch button: a 16 mm push button with two tabs. Right, a flipper
 button: a 24 mm arcade button with an LED inside, so four tabs. The two switch
 tabs come off the microswitch body, and the two lamp tabs off the LED holder
-behind it. All the tabs are 2.8 mm wide, so they take 2.8 mm (0.110") female
-spade connectors. Any colours work.*
+behind it. The arcade button's tabs are 2.8 mm wide, so they take 2.8 mm
+(0.110") female spade connectors. Any colours work.*
 
 Three things to watch:
 
