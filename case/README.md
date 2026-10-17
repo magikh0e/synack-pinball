@@ -46,7 +46,8 @@ and on their way in) against the printed parts, and it must come out empty
 
 | Qty | Part |
 |---|---|
-| 2 | 24 mm arcade button (flippers): 24 mm thread, ~30 mm body behind the panel |
+| 2 | 24 mm arcade button (flippers): 24 mm thread, ~30 mm body behind the panel, 2.8 mm tabs |
+| 8–12 | 2.8 mm (0.110") female spade connectors for the button tabs (4 per LED button, 2 for the launch button) |
 | 1 | 16 mm momentary panel button (launch), ≤3.5 mm panel; or a third 24 mm button with `LAUNCH_BTN=24` |
 | 1 | cavity speaker, 40.4 × 28.4 × 9.4 mm (8 Ω; the board drives up to 1.5 W at 8 Ω) |
 | 8 | M3 heat-set inserts (OD ~4 mm, 4–5 mm long) |
