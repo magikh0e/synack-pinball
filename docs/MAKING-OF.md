@@ -193,7 +193,14 @@ because the S3 talks to the PC over its own USB). On both, a launch button is
 wired across the board's BOOT button: hold to charge the plunger, release to
 fire.
 
-Two things to watch:
+Three things to watch:
+
+- **"1.25 mm" isn't one connector.** JST GH, MX1.25 and a few other families
+  all use 1.25 mm pin spacing, and they don't mate with each other. The
+  ES3C35P's sockets take **MX1.25**. It took two wrong kits to find that out;
+  a kit of pre-crimped MX1.25 leads is what finally fit.
+
+  <img src="guide/mx125-kit.jpg" alt="the label of an MX1.25 male and female connector kit with 15 cm pre-crimped leads" width="420">
 
 - The ES3C35P's serial socket has **5 V on pin 1** (marked with a small triangle
   and printed `5V`). Ground is pin 2. Read the labels printed on the board, not
@@ -281,6 +288,8 @@ back wall instead, and the cable then reaches the socket in one loose loop:
   every collision" also runs 600 times a second on a ball that's just rolling.
 - **Read the datasheet's fine print.** The 4-pixel rule and the 5 V pin were
   both written down. They just weren't where anyone looked first.
+- **Name the connector family, not just the pitch.** "1.25 mm" fits three
+  different plugs, and only one of them fits the board.
 - **Check how parts go in, not only where they end up.** A model can fit
   perfectly once assembled and still be impossible to assemble.
 - **Photos beat screenshots** for anything the panel itself gets wrong.

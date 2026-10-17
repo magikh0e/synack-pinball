@@ -139,8 +139,8 @@ On the **CYD**:
 | Right flipper | IO21 | P3 header |
 | Launch | GPIO 0 | the board's **BOOT** button: hold to charge, release to fire |
 
-On the **ES3C35P** the buttons go on the serial-port header (1.25 mm 4-pin; the
-board ships with a 1.25 mm to 2.54 mm adapter cable):
+On the **ES3C35P** the buttons go on the serial-port header (4-pin **MX1.25**;
+JST GH doesn't fit. The board ships with a 1.25 mm to 2.54 mm adapter cable):
 
 | Button | Pin | Where |
 |---|---|---|

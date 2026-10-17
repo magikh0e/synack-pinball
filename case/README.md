@@ -57,9 +57,9 @@ and on their way in) against the printed parts, and it must come out empty
 | 1 | USB-C panel-mount extension, 30 cm: female socket with a two-screw flange, straight male plug (comes with M3 × 11 screws) |
 | 1 | 90° USB-C adapter, male to female, socket on the broad face (12 mm body, 7.1 mm rise) |
 
-The board's speaker and button sockets are 1.25 mm. JST GH and MX1.25
-(PicoBlade) are both 1.25 mm and don't mate, so test-fit a plug before buying
-a batch.
+The board's speaker and button sockets are **MX1.25** (1.25 mm pitch); a kit
+of pre-crimped MX1.25 4-pin leads fits them. JST GH is also 1.25 mm but doesn't
+mate, so check the family, not just the pitch.
 
 ## Assembly
 
