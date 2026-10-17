@@ -193,6 +193,13 @@ because the S3 talks to the PC over its own USB). On both, a launch button is
 wired across the board's BOOT button: hold to charge the plunger, release to
 fire.
 
+<img src="guide/buttons.jpg" alt="a 16 mm metal push button with two tabs beside a red 24 mm arcade button with four tabs, front and back" width="640">
+
+*A 16 mm push button like the launch button (two tabs), and a 24 mm arcade
+button with an LED inside: four tabs, two for the switch and two for the lamp.
+The switch tabs come off the microswitch body; the lamp's come off the LED
+holder behind it.*
+
 Three things to watch:
 
 - **"1.25 mm" isn't one connector.** JST GH, MX1.25 and a few other families
