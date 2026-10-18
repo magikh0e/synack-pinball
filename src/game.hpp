@@ -144,6 +144,12 @@ constexpr uint32_t RAMP_SCORE = 2500, RAMP_JACKPOT = 15000;
 
 // left outlane kickback trigger zone and its indicator
 constexpr float KICK_X = 25, KICK_Y = 425;
+// the kick: straight up the middle of the outlane, then hooked right at
+// KICK_HOOK_Y, below the left orbit's exit wall (which a straight kick hits
+// from underneath, dropping the ball back into the outlane)
+constexpr float STILL_R = 8;  // stuck watchdog: a ball staying this close is "still"
+constexpr float KICK_LANE_X = (OUTER_L + SEP_X) / 2, KICK_V = 1000;
+constexpr float KICK_HOOK_Y = 330, KICK_OUT_VX = 500, KICK_OUT_VY = 700;
 
 // apron under the flippers: SHOOT AGAIN lamp (left), multiplier ladder (right)
 constexpr int APRON_Y = 458;
@@ -185,6 +191,8 @@ struct Ball {
   bool onRamp = false;      // riding the UPLINK ramp (its own layer)
   float rs = 0, ru = 0;     // ramp: distance along the path, speed along it
   float rideT = 0;          // time on the ramp this ride
+  bool kick = false;        // fired by the kickback, not yet hooked into play
+  V anchor{BALL_HOME_X, BALL_HOME_Y};  // stuck watchdog: where it's been sitting
 };
 
 struct Input {
@@ -229,6 +237,11 @@ class Game {
   uint32_t ballRamps = 0, ballLanes = 0, ballTargets = 0, ballSpins = 0;
   // end-of-ball bonus count-up: it runs between a drain and the next ball
   bool bonusActive = false, bonusFast = false;
+  Input prevIn{false, false, false};  // last frame's input, for press edges
+  // false from a serve until a touch starts (or the held one is let go), so
+  // a touch held over from before, through a drain and the bonus, can't
+  // charge the new ball
+  bool touchReady = false;
   int bonusStep = 0;
   float bonusT = 0;
   uint32_t bonusTotal = 0, bonusShown = 0;
@@ -254,6 +267,7 @@ class Game {
   bool charging = false;
   float saveT = 0;                    // ball-save time remaining
   bool everLeftLane = false;
+  bool saveSpent = false;             // this ball number's save is used up
   char msg[28] = "";
   float msgT = 0;
   float t = 0;                        // game clock, seconds
@@ -403,8 +417,9 @@ class Game {
     fullRedraw = true;
   }
 
-  // clear the table and put one ball on the plunger
-  void serveBall() {
+  // clear the table and put one ball on the plunger. `saved`: the same ball
+  // again after a ball save, which gets no second save or skill shot
+  void serveBall(bool saved = false) {
     for (Ball& b : balls)
       if (b.live) { markBallAt(b.p); b.live = false; }
     pendingAdd = 0;
@@ -414,12 +429,16 @@ class Game {
     b = Ball{};
     b.live = true;
     everLeftLane = false;
+    saveSpent = saved;
     charge = 0;
     charging = false;
-    skillArmed = true;
-    float c = 0.45f + rnd() * 0.35f;
-    skillLo = c - SKILL_W / 2;
-    skillHi = c + SKILL_W / 2;
+    touchReady = false;
+    skillArmed = !saved;
+    if (!saved) {
+      float c = 0.45f + rnd() * 0.35f;
+      skillLo = c - SKILL_W / 2;
+      skillHi = c + SKILL_W / 2;
+    }
     markBallAt(b.p);
     markPlunger();
   }
@@ -463,6 +482,9 @@ class Game {
     if (dt > 0.05f) dt = 0.05f;
     t += dt;
     stateT += dt;
+    Input fresh{in.left && !prevIn.left, in.right && !prevIn.right, in.touch && !prevIn.touch};
+    prevIn = in;
+    if (!in.touch || fresh.touch) touchReady = true;
     V p0[MAXBALLS];
     bool live0[MAXBALLS];
     for (int i = 0; i < MAXBALLS; i++) { p0[i] = balls[i].p; live0[i] = balls[i].live; }
@@ -490,7 +512,8 @@ class Game {
     if (bonusActive) {
       updateFlipper(fl, in.left, dt);
       updateFlipper(fr, in.right, dt);
-      if (in.left || in.right || in.touch) bonusFast = true;  // any press hurries it
+      // a new press hurries it; one held through the drain doesn't
+      if (fresh.left || fresh.right || fresh.touch) bonusFast = true;
       updateBonus(dt);
       return;
     }
@@ -498,7 +521,7 @@ class Game {
     // plunger: when a ball sits in the lane, a touch charges and release fires
     Ball* lb = laneBall();
     bool resting = lb && fabsf(lb->v.y) < 30 && lb->p.y > BALL_HOME_Y - 3;
-    if (resting && in.touch) {
+    if (resting && in.touch && touchReady) {
       charging = true;
       charge = clampf(charge + dt / PLUNGE_FILL_S, 0, 1);
       markPlunger();
@@ -554,7 +577,10 @@ class Game {
 
     if (!everLeftLane)
       for (Ball& b : balls)
-        if (b.live && b.p.y < 200) { everLeftLane = true; saveT = BALL_SAVE_S; }
+        if (b.live && b.p.y < 200) {
+          everLeftLane = true;
+          if (!saveSpent) saveT = BALL_SAVE_S;
+        }
     if (saveT > 0) saveT -= dt;
     if (mbSaveT > 0) mbSaveT -= dt;
     bool lit = saveT > 0 || mbSaveT > 0;
@@ -567,7 +593,9 @@ class Game {
       // left outlane kickback: fires the ball back up the outlane when lit
       if (kickback && b.p.x < KICK_X && b.p.y > KICK_Y) {
         kickback = false;
-        b.v = {0, -1000};
+        b.p.x = KICK_LANE_X;
+        b.v = {0, -KICK_V};
+        b.kick = true;
         markKickback();
         say("KICKBACK", 1.2f);
         events |= EV_KICKBACK;
@@ -727,6 +755,9 @@ class Game {
     mark(x0, tri[0].y - 6, x1, tri[2].y + 6);
   }
 
+  // host tests: an extra post, to build a trap a ball can rest in
+  void addPost(V p, float r) { addSeg(p, p, r, K_POST); }
+
  private:
   Seg& addSeg(V a, V b, float r, Kind k) {
     Seg& s = seg[nseg++];
@@ -834,6 +865,13 @@ class Game {
 
   void substep(Ball& b, float dt) {
     if (b.onRamp) { rampStep(b, dt); return; }
+    if (b.kick) {  // checked every substep, so a slow frame can't skip it
+      if (b.v.y > 0) b.kick = false;  // fell back without reaching the hook
+      else if (b.p.y < KICK_HOOK_Y) {
+        b.kick = false;
+        b.v = {KICK_OUT_VX, fmaxf(b.v.y, -KICK_OUT_VY)};
+      }
+    }
     b.v.y += GRAVITY * dt;
     float sp = len(b.v);
     if (sp > MAX_V) b.v = b.v * (MAX_V / sp);
@@ -1070,14 +1108,30 @@ class Game {
     }
   }
 
+  // a ball resting on a flipper that's held up (the player is cradling it)
+  bool cradled(const Ball& b, Input in) const {
+    for (int side = 0; side < 2; side++) {
+      const Flipper& f = side ? fr : fl;
+      if (!(side ? in.right : in.left)) continue;
+      V d = f.tip() - f.piv;
+      float u = clampf(dot(b.p - f.piv, d) / dot(d, d), 0, 1);
+      if (len(b.p - (f.piv + d * u)) < BALL_R + FLIP_RB + 4) return true;
+    }
+    return false;
+  }
+
   void stuckWatchdog(Ball& b, float dt, Input in) {
-    // a ball wedged somewhere (not cradled, not in the lane) gets a nudge
-    if (inLane(b) || in.left || in.right || len(b.v) > 12) {
+    // a ball that hasn't left a small circle for 3 s is wedged (or rattling
+    // in a trap) and gets a nudge. Only the lane and a cradle are exempt: one
+    // held flipper mustn't switch rescue off for every ball on the table.
+    if (inLane(b) || cradled(b, in) || len(b.p - b.anchor) > STILL_R) {
+      b.anchor = b.p;
       b.stillT = 0;
       return;
     }
     if ((b.stillT += dt) > 3.0f) {
       b.stillT = 0;
+      b.anchor = b.p;
       b.v = {(b.p.x < 148 ? 1 : -1) * 120.0f, -320.0f};
       nNudge++;
       events |= EV_NUDGE;
@@ -1111,7 +1165,7 @@ class Game {
       saveT = 0;
       say("BALL SAVED", 1.5f);
       events |= EV_SAVE;
-      serveBall();
+      serveBall(true);
       return;
     }
     events |= EV_DRAIN;

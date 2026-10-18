@@ -443,6 +443,124 @@ static void testSkillAndExtra() {
   CHECK(g.state == GAMEOVER, "game didn't end after the extra ball");
 }
 
+// run frames with fixed input; returns how many frames ran
+static int runFor(Game& g, float secs, Input in) {
+  int n = 0;
+  for (float t = 0; t < secs; t += 1 / 60.f, n++) { g.frame(1 / 60.f, in); g.ndirty = 0; }
+  return n;
+}
+
+// kickback: a ball falling into the left outlane with the kickback lit must
+// come back into play, not bounce off the orbit exit and drain
+static void testKickback() {
+  printf("== kickback ==\n");
+  for (float x : {12.f, 16.f, 20.f}) {
+    Game g;
+    g.startGame();
+    g.everLeftLane = true;
+    g.saveT = 0;
+    B(g).p = {x, 395};
+    B(g).v = {0, 250};
+    bool backInPlay = false;
+    for (int f = 0; f < 60 * 3 && B(g).live && !g.bonusActive; f++) {
+      g.frame(1 / 60.f, {false, false, false});
+      g.ndirty = 0;
+      if (B(g).p.x > 40 && B(g).p.y < 340) backInPlay = true;
+    }
+    printf("  from x=%.0f: kicked %u, back in play %s, live %d\n", x, g.nKick, backInPlay ? "yes" : "no",
+           B(g).live);
+    CHECK(g.nKick == 1 && backInPlay, "kickback from x=%.0f didn't return the ball to play", x);
+  }
+}
+
+// a press held over from before must not hurry the bonus or charge the
+// plunger: only a fresh press does
+static void testFreshPress() {
+  printf("== held vs fresh presses ==\n");
+  Game g;
+  g.startGame();
+  B(g).p = {148, 300};
+  B(g).v = {0, 0};
+  g.everLeftLane = true;
+  g.saveT = 0;
+  g.ballLanes = 3;
+  Input held{true, false, true};  // flipper and touch held the whole time
+  int f = 0;
+  while (!g.bonusActive && f++ < 600) { g.frame(1 / 60.f, held); g.ndirty = 0; }
+  runFor(g, 0.5f, held);
+  bool hurriedByHeld = g.bonusFast;
+  printf("  bonus with a press held through the drain: %s\n", hurriedByHeld ? "hurried" : "normal");
+  CHECK(g.bonusActive && !hurriedByHeld, "a held press hurried the bonus");
+  // keep holding through the bonus into the next ball: no charge
+  for (f = 0; f < 60 * 30 && g.bonusActive; f++) { g.frame(1 / 60.f, held); g.ndirty = 0; }
+  runFor(g, 0.5f, held);
+  printf("  next ball, touch still held: charge %.2f\n", g.charge);
+  CHECK(!g.bonusActive && g.ballInLane() && g.charge == 0, "a held touch charged the new ball's plunger");
+  // let go, touch again: that one charges
+  runFor(g, 0.1f, {false, false, false});
+  runFor(g, 0.3f, {false, false, true});
+  printf("  fresh touch: charge %.2f\n", g.charge);
+  CHECK(g.charge > 0, "a fresh touch didn't charge the plunger");
+}
+
+// ball save: one per ball. A saved ball comes back without a new save or a
+// new skill shot
+static void testSaveOnce() {
+  printf("== ball save once per ball ==\n");
+  Game g;
+  g.startGame();
+  auto quickDrain = [&]() {  // out of the lane, straight down the middle
+    B(g).p = {148, 190};
+    B(g).v = {0, 0};
+    for (int f = 0; f < 60 * 5 && B(g).live && !g.bonusActive && !g.ballInLane(); f++) {
+      g.frame(1 / 60.f, {false, false, false});
+      g.ndirty = 0;
+    }
+    // the ball drains, then is either served again or the bonus starts
+    for (int f = 0; f < 60 * 2 && !g.bonusActive && !g.ballInLane(); f++) {
+      g.frame(1 / 60.f, {false, false, false});
+      g.ndirty = 0;
+    }
+  };
+  quickDrain();
+  printf("  first quick drain: %s, skill shot armed %d\n",
+         g.bonusActive ? "lost" : "saved", g.skillArmed);
+  CHECK(!g.bonusActive && g.ball == 1 && g.ballInLane(), "the first quick drain wasn't saved");
+  CHECK(!g.skillArmed, "the saved ball got a second skill shot");
+  quickDrain();
+  printf("  second quick drain: %s\n", g.bonusActive ? "lost" : "saved");
+  CHECK(g.bonusActive, "the ball was saved twice");
+}
+
+// watchdog: a ball stuck in a trap gets nudged even while a flipper is held,
+// and a ball cradled on a held flipper is left alone
+static void testWatchdog() {
+  printf("== stuck-ball watchdog ==\n");
+  {
+    Game g;
+    g.startGame();
+    g.addPost({141, 250}, 3);  // a V of two posts the ball rests in
+    g.addPost({155, 250}, 3);
+    g.everLeftLane = true;
+    B(g).p = {148, 240};
+    B(g).v = {0, 0};
+    runFor(g, 5, {true, false, false});  // left flipper held throughout
+    printf("  ball trapped, left flipper held: nudges %u\n", g.nNudge);
+    CHECK(g.nNudge > 0, "a trapped ball wasn't nudged while a flipper was held");
+  }
+  {
+    Game g;
+    g.startGame();
+    g.everLeftLane = true;
+    g.saveT = 0;
+    B(g).p = {FLIP_PIV_L.x + 20, FLIP_PIV_L.y - 40};
+    B(g).v = {0, 0};
+    runFor(g, 6, {true, false, false});
+    printf("  ball cradled on the held left flipper for 6 s: nudges %u, live %d\n", g.nNudge, B(g).live);
+    CHECK(g.nNudge == 0 && B(g).live, "a cradled ball was nudged off the flipper");
+  }
+}
+
 int main() {
   HostCanvas cv;
   Game g;
@@ -459,6 +577,10 @@ int main() {
   testBonus();
   testRoll();
   testSkillAndExtra();
+  testKickback();
+  testFreshPress();
+  testSaveOnce();
+  testWatchdog();
   testDemo();
   testDirtyConsistency();
   cv.save("table.ppm");
