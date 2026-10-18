@@ -90,7 +90,8 @@ pio run -t upload --upload-port COM4                 # CYD
 pio run -e es3c35p -t upload --upload-port COM6      # ES3C35P (native USB)
 pio device monitor        # fps, worst frame and heap every 5 s
                           # serial: 'b' bot player, 'm' multiball, 'p' screenshot,
-                          # 'h<n>' set high score, 'o<n>' game-over screen with score n
+                          # 'h<n>' set high score, 'o<n>' game-over screen with score n,
+                          # 'v' volume, 'v<0-3>' set it (0 off, 3 high)
 python host/shot.py shot.png --reset --pre bm --wait 8   # real screenshot off the panel ('p')
 sh host/run.sh            # PC tests (Docker g++); exits non-zero on any failed check
 ```

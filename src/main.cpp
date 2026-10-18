@@ -436,8 +436,8 @@ void setup() {
   paint(0, 0, pb::SCR_W, pb::SCR_H);  // the first frame whole, before the backlight
   board::endFrame();
   game.fullRedraw = false;
-  Serial.printf("[pinball] ready on %s, display %s, heap %u, hi %u\n", board::NAME,
-                displayOk ? "ok" : "FAILED", ESP.getFreeHeap(), game.hiscore);
+  Serial.printf("[pinball] ready on %s, display %s, heap %u, hi %u, volume %u\n", board::NAME,
+                displayOk ? "ok" : "FAILED", ESP.getFreeHeap(), game.hiscore, volume);
 }
 
 void loop() {
@@ -446,7 +446,8 @@ void loop() {
 
   // serial debug: 'b' toggles the bot, 'm' starts multiball, 'p' screenshot,
   // 'h<n>' sets the high score (e.g. "h0" clears it), 'o<n>' shows the
-  // game-over screen with score n (the saved high score is untouched)
+  // game-over screen with score n (the saved high score is untouched),
+  // 'v' prints the volume and 'v<0-3>' sets it (saved, with a sample)
   if (Serial.available()) {
     int c = Serial.read();
     if (c == 'b') {
@@ -465,6 +466,19 @@ void loop() {
       prefs.putUInt("hi", game.hiscore);
       game.markHud();
       Serial.printf("[pinball] hi set to %u\n", game.hiscore);
+    } else if (c == 'v') {
+      // a digit right after it sets the level; 'v' alone just reports it
+      uint32_t t0 = millis();
+      while (!Serial.available() && millis() - t0 < 50) delay(1);
+      int d = Serial.available() ? Serial.peek() : -1;
+      if (d >= '0' && d < '0' + board::VOLUME_LEVELS) {
+        Serial.read();
+        volume = d - '0';
+        board::setVolume(volume);
+        prefs.putUChar("vol", volume);
+        sfx(9, {{1047, 70, W_TRI}, {1568, 120, W_TRI}});  // a sample at the new level
+      }
+      Serial.printf("[pinball] volume %u of %d\n", volume, board::VOLUME_LEVELS - 1);
     }
   }
   uint32_t now = micros();
