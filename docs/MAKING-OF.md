@@ -126,9 +126,9 @@ outlane sits the exit wall of the left orbit, angled to throw balls coming
 down the orbit back into play. A ball fired straight up hit that wall from
 underneath and dropped back down the same outlane.
 
-The problem showed up while building Hack the Planet, a browser pinball game
-by the same maker that runs on SYN/ACK's physics. It was fixed there first,
-and the fix carried straight back:
+I ran into this while building Hack the Planet, my browser pinball game that
+runs on SYN/ACK's physics. I fixed it there first, and the fix carried
+straight back:
 start the ball in the middle of the outlane, and partway up hook it to the
 right, under the wall instead of into it. The hook is checked in every
 physics step, so a slow frame can't carry the ball past it:
