@@ -250,7 +250,7 @@ namespace board {
 const char* const NAME = "ES3C35P (ESP32-S3)";
 const bool MULTITOUCH = true;
 const int ALIGN_X = 4;  // ST77922 CASET: XS and width must be multiples of 4
-const uint8_t DEFAULT_VOLUME = 2;
+const uint8_t DEFAULT_VOLUME = 3;  // high: the cabinet speaker sits behind a grille
 const uint8_t BRIGHT_FULL = 255;
 
 bool init() {

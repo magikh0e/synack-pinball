@@ -74,8 +74,8 @@ when it ends or after 90 s.
 all flash.
 
 **Volume:** off the table (title, game over, demo) hold **BOOT** for a second
-to cycle off / low / medium / high; a short press still starts a game. Kept in
-NVS. The ES3C35P synthesizes its sounds on three mixed voices (square, pulse,
+to cycle off / low / medium / high (high by default); a short press still
+starts a game. Kept in NVS. The ES3C35P synthesizes its sounds on three mixed voices (square, pulse,
 triangle, saw, noise, pitch sweeps), so a flipper thwack doesn't cut off a
 bumper; the CYD's single buzzer plays the newest sound as plain beeps.
 
