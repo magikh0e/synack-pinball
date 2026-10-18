@@ -350,6 +350,13 @@ loose loop:
 
 ![both boards running the same game](both-boards.jpg)
 
+### Finished
+
+<img src="guide/finished.jpg" alt="the finished cabinet mid-game, with the blue left flipper button lit and the green SYN/ACK marquee" width="420">
+
+All closed up: the deck screwed down, the launch button wired to BOOT, and the
+left flipper button lit, mid-game.
+
 ## What it taught me
 
 - **Keep the game portable.** Being able to run the real physics on a PC paid
