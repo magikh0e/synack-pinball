@@ -1,6 +1,6 @@
 # The making of SYN/ACK
 
-<img src="cabinet.jpg" alt="the finished cabinet running the attract demo" width="420">
+<img src="cabinet.jpg" alt="the finished cabinet mid-game, with the blue left flipper button lit and the green SYN/ACK marquee" width="420">
 
 SYN/ACK is a pinball table for 3.5-inch ESP32 touch boards: a 320 × 480 neon
 playfield where the lanes spell SYN, the targets spell ACK, and completing the
@@ -349,13 +349,6 @@ loose loop:
   across the room.
 
 ![both boards running the same game](both-boards.jpg)
-
-### Finished
-
-<img src="guide/finished.jpg" alt="the finished cabinet mid-game, with the blue left flipper button lit and the green SYN/ACK marquee" width="420">
-
-All closed up: the deck screwed down, the launch button wired to BOOT, and the
-left flipper button lit, mid-game.
 
 ## What it taught me
 

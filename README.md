@@ -127,7 +127,7 @@ schematic, ST77922 specification and example code.
 
 ## Cabinet
 
-<img src="docs/cabinet.jpg" alt="the printed cabinet running the demo" width="360">
+<img src="docs/cabinet.jpg" alt="the finished cabinet mid-game, with the left flipper button lit" width="360">
 
 [`case/`](case/README.md) has a printable tabletop cabinet for the ES3C35P (OpenSCAD, with
 ready STLs): a 30° deck, a backbox with marquee and speaker, and arcade buttons on

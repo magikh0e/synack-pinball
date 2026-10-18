@@ -1,6 +1,6 @@
 # Tabletop cabinet (ES3C35P)
 
-<img src="../docs/cabinet.jpg" alt="the printed cabinet running the demo" width="360">
+<img src="../docs/cabinet.jpg" alt="the finished cabinet mid-game, with the left flipper button lit" width="360">
 
 ![assembly](renders/assembly.png) ![cutaway](renders/section.png)
 
