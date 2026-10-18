@@ -279,6 +279,13 @@ Four things to watch:
   2.8 mm spade connectors, so there's no need to solder at the button at all,
   and a dead lamp becomes a plug-in swap.
 
+**How I ran the shared wires.** To keep the wire count down, I chained the
+connections the buttons share. The buttons' negative (ground) tabs are
+jumpered to each other, and one lead runs from the board's GND to one of them.
+The lamps' 5 V tabs are chained the same way, with one lead from the board's
+5 V pin to the first lamp. Only each lamp's − stays on its own wire, to its own
+transistor; chain those and the game can't light one button without the other.
+
 ## The cabinet
 
 ### Concepts
