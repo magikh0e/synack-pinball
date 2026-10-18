@@ -73,8 +73,7 @@ it never sets the high score.
 
 <img src="guide/high-scores.png" alt="the title panel showing the HIGH SCORES table, with TAP TO START and hold for volume below it" width="240">
 
-A pinball machine isn't finished until it asks for your initials, so SYN/ACK
-keeps a top-five table. A score that makes the table brings up the classic
+Like an arcade machine, SYN/ACK keeps a top-five table. A score that makes the table brings up the classic
 three-letter entry on the game-over screen, worked with the flipper buttons:
 
 - a flipper steps the letter back or forward,
