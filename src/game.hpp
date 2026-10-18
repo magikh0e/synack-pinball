@@ -147,6 +147,10 @@ constexpr float KICK_X = 25, KICK_Y = 425;
 // the kick: straight up the middle of the outlane, then hooked right at
 // KICK_HOOK_Y, below the left orbit's exit wall (which a straight kick hits
 // from underneath, dropping the ball back into the outlane)
+// ball-ball hits: a ball pressed against a wall or flipper (cradled, rolling
+// along a guide) can't move into it, so it acts this many times heavier when
+// pushed that way. As equals, a ball dropped on a cradled one stopped dead.
+constexpr float PIN_X = 10;
 constexpr float STILL_R = 8;  // stuck watchdog: a ball staying this close is "still"
 constexpr float KICK_LANE_X = (OUTER_L + SEP_X) / 2, KICK_V = 1000;
 constexpr float KICK_HOOK_Y = 330, KICK_OUT_VX = 500, KICK_OUT_VY = 700;
@@ -193,6 +197,8 @@ struct Ball {
   float rideT = 0;          // time on the ramp this ride
   bool kick = false;        // fired by the kickback, not yet hooked into play
   V anchor{BALL_HOME_X, BALL_HOME_Y};  // stuck watchdog: where it's been sitting
+  V supN{0, -1};            // last wall/flipper contact normal (out of the surface)
+  uint8_t supAge = 255;     // substeps since that contact
 };
 
 struct Input {
@@ -843,6 +849,8 @@ class Game {
     float dist = sqrtf(dist2);
     V n = dist > 1e-4f ? dv * (1.0f / dist) : V{0, -1};
     b.p = c + n * rr;
+    b.supN = n;
+    b.supAge = 0;
     V vs = piv ? perp(c - *piv) * w : V{0, 0};
     V rel = b.v - vs;
     float vn = dot(rel, n);
@@ -865,6 +873,7 @@ class Game {
 
   void substep(Ball& b, float dt) {
     if (b.onRamp) { rampStep(b, dt); return; }
+    if (b.supAge < 255) b.supAge++;
     if (b.kick) {  // checked every substep, so a slow frame can't skip it
       if (b.v.y > 0) b.kick = false;  // fell back without reaching the hook
       else if (b.p.y < KICK_HOOK_Y) {
@@ -959,6 +968,10 @@ class Game {
   }
 
   // equal-mass, slightly lossy collisions between balls
+  // a ball touching a wall or flipper in the last couple of substeps, being
+  // pushed (direction `dir`) into it
+  static bool pinned(const Ball& b, V dir) { return b.supAge <= 2 && dot(dir, b.supN) < -0.3f; }
+
   void ballBallCollide() {
     for (int i = 0; i < MAXBALLS; i++)
       for (int j = i + 1; j < MAXBALLS; j++) {
@@ -969,14 +982,18 @@ class Game {
         if (d2 >= rr * rr || d2 < 1e-6f) continue;
         float dist = sqrtf(d2);
         V n = d * (1.0f / dist);
-        float push = (rr - dist) * 0.5f;
-        a.p = a.p - n * push;
-        c.p = c.p + n * push;
+        // inverse masses: 1, or 1/PIN_X for a ball pushed into its support
+        float wa = pinned(a, n * -1.0f) ? 1 / PIN_X : 1;
+        float wc = pinned(c, n) ? 1 / PIN_X : 1;
+        float wsum = wa + wc;
+        float over = rr - dist;
+        a.p = a.p - n * (over * wa / wsum);
+        c.p = c.p + n * (over * wc / wsum);
         float vn = dot(c.v - a.v, n);
         if (vn < 0) {
-          V imp = n * (-(1 + 0.9f) * vn * 0.5f);
-          a.v = a.v - imp;
-          c.v = c.v + imp;
+          float j = -(1 + 0.9f) * vn / wsum;
+          a.v = a.v - n * (j * wa);
+          c.v = c.v + n * (j * wc);
         }
       }
   }

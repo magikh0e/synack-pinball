@@ -561,6 +561,39 @@ static void testWatchdog() {
   }
 }
 
+// multiball: a ball dropped onto one cradled on a held flipper should bounce
+// off it, not stop dead. The cradled ball is pinned against the flipper, so it
+// should act much heavier than a free one
+static void testPinnedBall() {
+  printf("== ball hits a cradled ball ==\n");
+  Game g;
+  g.startGame();
+  g.everLeftLane = true;
+  g.saveT = 0;
+  Ball& a = g.balls[0];
+  a.p = {FLIP_PIV_L.x + 20, FLIP_PIV_L.y - 40};
+  a.v = {0, 0};
+  runFor(g, 1.5f, {true, false, false});  // settle into the cradle
+  Ball& c = g.balls[1];
+  c = Ball{};
+  c.live = true;
+  c.p = a.p + V{0, -70};
+  c.v = {0, 600};
+  float inV = 0;
+  bool hit = false;
+  for (int f = 0; f < 60 && !hit; f++) {
+    inV = c.v.y;
+    g.frame(1 / 60.f, {true, false, false});
+    g.ndirty = 0;
+    if (len(c.p - a.p) < 2 * BALL_R + 1 || c.v.y < 0) hit = true;
+  }
+  runFor(g, 3 / 60.f, {true, false, false});
+  float kept = -c.v.y / inV;
+  printf("  falling ball in at %.0f px/s, back up at %.0f px/s (%.0f%% kept), cradled ball live %d\n",
+         inV, -c.v.y, kept * 100, a.live);
+  CHECK(hit && kept > 0.5f && a.live, "the falling ball stopped dead on the cradled one (%.0f%% kept)", kept * 100);
+}
+
 int main() {
   HostCanvas cv;
   Game g;
@@ -581,6 +614,7 @@ int main() {
   testFreshPress();
   testSaveOnce();
   testWatchdog();
+  testPinnedBall();
   testDemo();
   testDirtyConsistency();
   cv.save("table.ppm");
