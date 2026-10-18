@@ -135,7 +135,7 @@ On the **CYD**:
 
 | Button | Pin | Where |
 |---|---|---|
-| Left flipper | IO22 | "Extended IO" header, silkscreened P3 (`GND IO35 IO22 IO21`): 4-pin 1.25 mm per Sunton's spec; JST **GH** fits, PicoBlade doesn't |
+| Left flipper | IO22 | "Extended IO" header, silkscreened P3 (`GND IO35 IO22 IO21`): 4-pin **MX1.25** |
 | Right flipper | IO21 | P3 header |
 | Launch | GPIO 0 | the board's **BOOT** button: hold to charge, release to fire |
 

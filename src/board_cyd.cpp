@@ -19,7 +19,7 @@ constexpr int SPK_CH = 0;
 // pull-ups, so unwired pins just read "not pressed"). -1 = none.
 //   flippers: IO22 / IO21 on the "Extended IO" header, silkscreened P3:
 //             GND IO35 IO22 IO21. Sunton's document gives its connectors as
-//             4-pin 1.25 mm; the plug that fits is JST GH (PicoBlade doesn't).
+//             4-pin 1.25 mm; they take MX1.25 plugs.
 //   launch:   the board's BOOT button, GPIO 0. (Don't hold it while the board
 //             resets: it enters flash mode.)
 // IO35 is the other free pin, but input-only with no pull-up (needs 10k to 3.3V).
