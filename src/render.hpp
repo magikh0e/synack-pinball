@@ -296,20 +296,49 @@ void drawWorld(G& g, const Game& s) {
       g.rect(px, py, pw, 2, MAG);
       g.rect(px, py + ph - 2, pw, 2, MAG);
       int cx = px + pw / 2;
-      if (s.state == ATTRACT) {
+      char b[24];
+      if (s.state == ATTRACT && s.attractPageNow() == 1) {
+        // the high-score table
+        g.text("HIGH SCORES", cx, py + 22, D_MC, F_SMALL, AMBER);
+        for (int i = 0; i < HS_N && s.hs[i].score; i++) {
+          int y = py + 44 + i * 18;
+          snprintf(b, sizeof b, "%d", i + 1);
+          g.text(b, px + 30, y, D_ML, F_SMALL, MUTED);
+          g.text(s.hs[i].ini, px + 52, y, D_ML, F_SMALL, WALL);
+          fmtScore(b, sizeof b, s.hs[i].score);
+          g.text(b, px + pw - 26, y, D_MR, F_SMALL, GREEN);
+        }
+      } else if (s.state == ATTRACT) {
         g.text("SYN/ACK", cx, py + 38, D_MC, F_BIG, GREEN);
-        g.text("p i n b a l l", cx, py + 70, D_MC, F_SMALL, WALL);
-        g.text("SYN lanes > ACK targets", cx, py + 100, D_MC, F_SMALL, MUTED);
-        g.text("= HANDSHAKE jackpot", cx, py + 118, D_MC, F_SMALL, MUTED);
+        g.text("p i n b a l l", cx, py + 66, D_MC, F_SMALL, WALL);
+        g.text("SYN lanes > ACK targets", cx, py + 90, D_MC, F_SMALL, MUTED);
+        g.text("= HANDSHAKE jackpot", cx, py + 106, D_MC, F_SMALL, MUTED);
+      } else if (s.entering) {
+        // initials: the letter being chosen blinks over an amber underline
+        if (s.entryRank == 0) snprintf(b, sizeof b, "NEW HIGH SCORE");
+        else snprintf(b, sizeof b, "HIGH SCORE #%d", s.entryRank + 1);
+        g.text(b, cx, py + 22, D_MC, F_SMALL, AMBER);
+        fmtScore(b, sizeof b, s.score);
+        g.text(b, cx, py + 54, D_MC, F_BIG, GREEN);
+        for (int i = 0; i < HS_LEN; i++) {
+          int x = cx + (i - 1) * 40;
+          bool cur = i == s.entryPos;
+          char ch[2] = {s.entryIni[i], 0};
+          if (!cur || s.blinkOn) g.text(ch, x, py + 100, D_MC, F_BIG, cur ? AMBER : WALL);
+          g.rect(x - 13, py + 120, 26, 2, cur ? AMBER : MUTED);
+        }
+        g.text("flippers: letter", cx, py + 140, D_MC, F_SMALL, MUTED);
+        g.text("both or launch: OK", cx, py + 156, D_MC, F_SMALL, MUTED);
       } else {
         g.text("GAME OVER", cx, py + 38, D_MC, F_TITLE, MAG);
-        char b[24];
         fmtScore(b, sizeof b, s.score);
         g.text(b, cx, py + 76, D_MC, F_BIG, GREEN);
         if (s.score > 0 && s.score >= s.hiscore) g.text("NEW HIGH SCORE", cx, py + 108, D_MC, F_SMALL, AMBER);
       }
-      if ((s.state == ATTRACT || s.stateT > 1.2f))
-        g.text("TAP TO START", cx, py + ph - 24, D_MC, F_SMALL, AMBER);
+      if (!s.entering && (s.state == ATTRACT || s.stateT > 1.2f)) {
+        g.text("TAP TO START", cx, py + ph - 32, D_MC, F_SMALL, AMBER);
+        g.text("hold for volume", cx, py + ph - 14, D_MC, F_SMALL, MUTED);
+      }
     }
   }
 }

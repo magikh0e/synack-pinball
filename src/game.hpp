@@ -151,6 +151,15 @@ constexpr float KICK_X = 25, KICK_Y = 425;
 // along a guide) can't move into it, so it acts this many times heavier when
 // pushed that way. As equals, a ball dropped on a cradled one stopped dead.
 constexpr float PIN_X = 10;
+// ball-to-ball clack: hits closing faster than this make a sound, at most one
+// per CLACK_GAP so a ball rattling against another doesn't buzz
+constexpr float CLACK_V = 60, CLACK_HARD_V = 300, CLACK_GAP = 0.06f;
+// high scores: the top HS_N with HS_LEN initials each, kept by the board in NVS
+constexpr int HS_N = 5, HS_LEN = 3;
+constexpr float ENTRY_IDLE_S = 30;    // initials left alone this long are kept as they are
+constexpr float ATTRACT_PAGE_S = 6;   // title / high-score table on the attract panel
+constexpr char ENTRY_CHARS[] = "ABCDEFGHIJKLMNOPQRSTUVWXYZ ";
+constexpr int ENTRY_NCHARS = sizeof ENTRY_CHARS - 1;
 constexpr float STILL_R = 8;  // stuck watchdog: a ball staying this close is "still"
 constexpr float KICK_LANE_X = (OUTER_L + SEP_X) / 2, KICK_V = 1000;
 constexpr float KICK_HOOK_Y = 330, KICK_OUT_VX = 500, KICK_OUT_VY = 700;
@@ -204,6 +213,7 @@ struct Ball {
 struct Input {
   bool left, right;  // flipper buttons
   bool touch;        // any touch (plunger)
+  bool launch;       // the launch button (BOOT) on its own: confirms initials
 };
 
 enum State : uint8_t { ATTRACT, PLAY, GAMEOVER };
@@ -216,7 +226,10 @@ enum : uint32_t {
   EV_START = 1 << 12, EV_NUDGE = 1 << 13, EV_KICKBACK = 1 << 14,
   EV_SPIN = 1 << 15, EV_MULTIBALL = 1 << 16, EV_RAMP = 1 << 17,
   EV_BONUS_LINE = 1 << 18, EV_BONUS_TICK = 1 << 19, EV_FLIP_HIT = 1 << 20,
-  EV_SKILL = 1 << 21, EV_EXTRA = 1 << 22,
+  EV_SKILL = 1 << 21, EV_EXTRA = 1 << 22, EV_BALL_HIT = 1 << 23,
+  EV_LETTER = 1 << 24,   // initials: a letter stepped
+  EV_LETTER_OK = 1 << 25,  // initials: a letter confirmed
+  EV_ENTRY = 1 << 26,    // initials: saved to the table
 };
 
 // ---------------------------------------------------------------- game
@@ -243,6 +256,22 @@ class Game {
   uint32_t ballRamps = 0, ballLanes = 0, ballTargets = 0, ballSpins = 0;
   // end-of-ball bonus count-up: it runs between a drain and the next ball
   bool bonusActive = false, bonusFast = false;
+  // high-score table, best first (score 0 = empty slot). hiscore is hs[0].
+  struct HiEntry {
+    uint32_t score;
+    char ini[HS_LEN + 1];
+  };
+  HiEntry hs[HS_N] = {};
+  bool hsChanged = false;  // the board saves the table and clears this
+  // initials entry on the game-over screen
+  bool entering = false;
+  int entryRank = -1, entryPos = 0;
+  char entryIni[HS_LEN + 1] = "AAA";
+  float entryIdleT = 0;
+  bool entryChord = false;  // both flippers went down together: no letter steps
+  float clackT = 0;
+  bool clackHard = false;
+  int attractPage = -1, entryBlink = -1;
   Input prevIn{false, false, false};  // last frame's input, for press edges
   // false from a serve until a touch starts (or the held one is let go), so
   // a touch held over from before, through a drain and the bonus, can't
@@ -288,6 +317,7 @@ class Game {
   bool fullRedraw = true;
 
   // stats (host harness)
+  uint32_t nBallHit = 0;
   uint32_t nBumper = 0, nSling = 0, nTarget = 0, nLane = 0, nNudge = 0, nKick = 0, nSpin = 0, nMulti = 0, nRampIn = 0, nRamp = 0;
   float rampRideSum = 0, rampRideMax = 0;  // completed rides, seconds
   uint32_t nFlipHit = 0;
@@ -402,6 +432,7 @@ class Game {
   // ------------------------------------------------------------ control
   void startGame() {
     demo = false;
+    entering = false;
     bonusActive = false;
     resetBallCounts();
     score = 0;
@@ -488,8 +519,11 @@ class Game {
     if (dt > 0.05f) dt = 0.05f;
     t += dt;
     stateT += dt;
-    Input fresh{in.left && !prevIn.left, in.right && !prevIn.right, in.touch && !prevIn.touch};
+    Input fresh{in.left && !prevIn.left, in.right && !prevIn.right, in.touch && !prevIn.touch,
+                in.launch && !prevIn.launch};
+    Input released{!in.left && prevIn.left, !in.right && prevIn.right, false, false};
     prevIn = in;
+    if (clackT > 0) clackT -= dt;
     if (!in.touch || fresh.touch) touchReady = true;
     V p0[MAXBALLS];
     bool live0[MAXBALLS];
@@ -503,6 +537,7 @@ class Game {
     decay(targetFlash, 3, dt, [&](int i) { markTarget(i); });
 
     if (state != PLAY) {
+      if (entering) updateEntry(dt, in, fresh, released);
       updateShow();
       // "TAP TO START" appears once the game-over screen has been up a moment
       if (state == GAMEOVER && stateT >= 1.2f && stateT - dt < 1.2f)
@@ -630,6 +665,14 @@ class Game {
     return i == step || i == (step + SHOW_LAMPS - 1) % SHOW_LAMPS;  // a lamp and its tail
   }
   PB_NOINLINE void updateShow() {
+    if (state == ATTRACT && attractPageNow() != attractPage) {
+      attractPage = attractPageNow();
+      markPanel();
+    }
+    if (entering && (int)blinkOn != entryBlink) {
+      entryBlink = blinkOn;
+      markPanel();
+    }
     int key = newHigh() ? (blinkOn ? 100 : 101) : (int)(stateT * SHOW_HZ) % SHOW_LAMPS;
     if (key == showKey) return;
     showKey = key;
@@ -652,6 +695,82 @@ class Game {
     fullRedraw = true;
   }
 
+  // ---- high scores
+  // the place a score would take in the table (0 = best), or -1
+  int hsRank(uint32_t sc) const {
+    if (sc == 0) return -1;
+    for (int i = 0; i < HS_N; i++)
+      if (sc > hs[i].score) return i;
+    return -1;
+  }
+  void syncHi() { hiscore = hs[0].score; }
+  int attractPageNow() const { return hs[0].score ? (int)(stateT / ATTRACT_PAGE_S) % 2 : 0; }
+  void markPanel() { mark(PANEL_X, PANEL_Y, PANEL_X + PANEL_W, PANEL_Y + PANEL_H); }
+
+  // the game is over: to the game-over screen, via initials if it's a top score
+  PB_NOINLINE void gameOver() {
+    state = GAMEOVER;
+    stateT = 0;
+    events |= EV_GAMEOVER;
+    fullRedraw = true;
+    entryRank = hsRank(score);
+    entering = entryRank >= 0;
+    if (entering) {
+      entryPos = 0;
+      memcpy(entryIni, "AAA", HS_LEN + 1);
+      entryIdleT = 0;
+      entryChord = false;
+      entryBlink = -1;
+    }
+  }
+
+  // initials: a flipper steps the letter when it's let go (back / forward);
+  // both flippers together, or the launch button, confirm it
+  PB_NOINLINE void updateEntry(float dt, Input in, Input fresh, Input released) {
+    entryIdleT += dt;
+    if (in.left && in.right) {
+      if (!entryChord) {
+        entryChord = true;
+        confirmLetter();
+      }
+    } else if (fresh.launch) {
+      confirmLetter();
+    } else if (!entryChord && (released.left || released.right)) {
+      stepLetter(released.left ? -1 : 1);
+    }
+    if (!in.left && !in.right) entryChord = false;
+    if (entering && entryIdleT > ENTRY_IDLE_S) commitEntry();
+  }
+  void stepLetter(int d) {
+    const char* at = strchr(ENTRY_CHARS, entryIni[entryPos]);
+    int i = at ? (int)(at - ENTRY_CHARS) : 0;
+    entryIni[entryPos] = ENTRY_CHARS[(i + d + ENTRY_NCHARS) % ENTRY_NCHARS];
+    entryIdleT = 0;
+    events |= EV_LETTER;
+    markPanel();
+  }
+  void confirmLetter() {
+    entryIdleT = 0;
+    if (++entryPos >= HS_LEN) {
+      commitEntry();
+      return;
+    }
+    events |= EV_LETTER_OK;
+    markPanel();
+  }
+  PB_NOINLINE void commitEntry() {
+    for (int i = HS_N - 1; i > entryRank; i--) hs[i] = hs[i - 1];
+    hs[entryRank].score = score;
+    memcpy(hs[entryRank].ini, entryIni, HS_LEN + 1);
+    syncHi();
+    hsChanged = true;
+    entering = false;
+    stateT = 0;  // the TAP TO START delay starts now
+    events |= EV_ENTRY;
+    markPanel();
+    markHud();
+  }
+
   // a short note in the top bar, for a couple of seconds
   void notify(const char* s) {
     snprintf(hudNote, sizeof hudNote, "%s", s);
@@ -660,6 +779,7 @@ class Game {
   }
 
   void tap() {  // touch on attract / game-over screen, or during the demo
+    if (entering) return;  // initials first
     if (demo || state == ATTRACT || (state == GAMEOVER && stateT > 1.2f)) startGame();
   }
 
@@ -672,7 +792,7 @@ class Game {
     msgT = 0;
   }
 
-  bool demoDue() const { return !demo && state != PLAY && stateT > DEMO_IDLE_S; }
+  bool demoDue() const { return !demo && !entering && state != PLAY && stateT > DEMO_IDLE_S; }
 
   void endDemo() {
     for (Ball& b : balls) b.live = false;
@@ -994,6 +1114,12 @@ class Game {
           float j = -(1 + 0.9f) * vn / wsum;
           a.v = a.v - n * (j * wa);
           c.v = c.v + n * (j * wc);
+          if (-vn > CLACK_V && clackT <= 0) {
+            clackT = CLACK_GAP;
+            clackHard = -vn > CLACK_HARD_V;
+            events |= EV_BALL_HIT;
+            nBallHit++;
+          }
         }
       }
   }
@@ -1297,11 +1423,7 @@ class Game {
     }
     if (bonusThenOver && !again) {
       if (demo) { endDemo(); return; }
-      state = GAMEOVER;
-      stateT = 0;
-      if (score > hiscore) hiscore = score;
-      events |= EV_GAMEOVER;
-      fullRedraw = true;
+      gameOver();
       return;
     }
     if (!again) ball++;

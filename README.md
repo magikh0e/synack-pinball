@@ -52,7 +52,7 @@ thumb on each side lands in the middle zone and fires both flippers.
   roll back out.
 - **Spinner** in the left orbit lane: 100 per half turn, doubled (and the plate
   turns magenta) while SYN is armed.
-- Pop bumpers 100, slingshots 10. The high score is kept in NVS.
+- Pop bumpers 100, slingshots 10.
 - **Skill shot:** a magenta zone sits beside the plunger's power meter (it
   moves each ball). Release with the power inside it for 5,000; the meter
   turns white while you're in the zone.
@@ -73,11 +73,18 @@ when it ends or after 90 s.
 **Between games** the lamps chase around the table; on a new high score they
 all flash.
 
-**Volume:** off the table (title, game over, demo) hold **BOOT** for a second
-to cycle off / low / medium / high (high by default); a short press still
-starts a game. Kept in NVS. The ES3C35P synthesizes its sounds on three mixed voices (square, pulse,
+**High scores:** a score in the top five asks for three initials. A flipper
+steps the letter back or forward when you let go of it; both flippers
+together (or the launch button) take the letter. Left alone for 30 s, the
+initials are kept as they are. The title screen takes turns with the
+high-score table. The table is kept in NVS.
+
+**Volume:** off the table (title, game over, demo) hold the screen, or
+**BOOT**, for a second to cycle off / low / medium / high (high by default); a
+short tap still starts a game. Kept in NVS. The ES3C35P synthesizes its sounds on three mixed voices (square, pulse,
 triangle, saw, noise, pitch sweeps), so a flipper thwack doesn't cut off a
-bumper; the CYD's single buzzer plays the newest sound as plain beeps.
+bumper, and in multiball the balls clack when they hit each other; the CYD's
+single buzzer plays the newest sound as plain beeps.
 
 **Idle:** after 2 minutes with no touch or button the backlight dims, and after
 10 minutes it goes dark and stops drawing. Any touch wakes it (that touch is
@@ -90,7 +97,7 @@ pio run -t upload --upload-port COM4                 # CYD
 pio run -e es3c35p -t upload --upload-port COM6      # ES3C35P (native USB)
 pio device monitor        # fps, worst frame and heap every 5 s
                           # serial: 'b' bot player, 'm' multiball, 'p' screenshot,
-                          # 'h<n>' set high score, 'o<n>' game-over screen with score n,
+                          # 'h' high-score table, 'h0' clear it, 'o<n>' game-over screen with score n,
                           # 'v' volume, 'v<0-3>' set it (0 off, 3 high)
 python host/shot.py shot.png --reset --pre bm --wait 8   # real screenshot off the panel ('p')
 sh host/run.sh            # PC tests (Docker g++); exits non-zero on any failed check

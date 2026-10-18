@@ -219,7 +219,7 @@ static void soak(HostCanvas& cv, int balls) {
   printf("  drains: left outlane %ld  centre %ld  right outlane %ld\n", outL, centre, outR);
   printf("  bumper %u  sling %u  target %u  lane %u  nudges %u  kickbacks %u  spins %u  escapes %ld\n",
          g.nBumper, g.nSling, g.nTarget, g.nLane, g.nNudge, g.nKick, g.nSpin, escapes);
-  printf("  flipper hits (sound events) %u\n", g.nFlipHit);
+  printf("  flipper hits (sound events) %u, ball-to-ball clacks %u\n", g.nFlipHit, g.nBallHit);
   printf("  ramp: entered %u, completed %u, ride avg %.2fs max %.2fs\n", g.nRampIn, g.nRamp,
          g.nRamp ? g.rampRideSum / g.nRamp : 0.0f, g.rampRideMax);
   std::sort(scores.begin(), scores.end());
@@ -594,6 +594,79 @@ static void testPinnedBall() {
   CHECK(hit && kept > 0.5f && a.live, "the falling ball stopped dead on the cradled one (%.0f%% kept)", kept * 100);
 }
 
+// high scores: a top-5 score goes to initials entry (flippers step a letter
+// when let go, both together or launch confirm it), the table stays sorted,
+// a lower score skips entry, a tap can't skip it, and an idle player's
+// initials are kept after a timeout
+static void hsFrame(Game& g, Input in) { g.frame(1 / 60.f, in); g.ndirty = 0; g.events = 0; }
+static void hsPress(Game& g, Input in) { hsFrame(g, in); hsFrame(g, {false, false, false, false}); }
+static void hsEnd(Game& g, uint32_t sc) {
+  g.startGame();
+  g.score = sc;
+  g.gameOver();
+}
+static void testInitials() {
+  printf("== high-score initials ==\n");
+  Game g;
+  hsEnd(g, 5000);
+  CHECK(g.entering && g.entryRank == 0, "a first score didn't start initials entry");
+  g.tap();
+  CHECK(g.state == GAMEOVER && g.entering, "a tap skipped initials entry");
+  hsPress(g, {false, true, false, false});  // A -> B
+  hsPress(g, {false, true, false, false});  // B -> C
+  hsPress(g, {true, true, false, false});   // both: confirm C
+  hsPress(g, {true, false, false, false});  // A -> space
+  hsPress(g, {true, false, false, false});  // space -> Z
+  hsPress(g, {false, false, false, true});  // launch: confirm Z
+  hsPress(g, {false, false, false, true});  // confirm A, done
+  printf("  first entry: \"%s\" %u, entering %d, hi %u\n", g.hs[0].ini, g.hs[0].score, g.entering, g.hiscore);
+  CHECK(!g.entering && g.hs[0].score == 5000 && !strcmp(g.hs[0].ini, "CZA") && g.hiscore == 5000 && g.hsChanged,
+        "initials not saved as entered");
+  for (uint32_t sc : {9000u, 7000u, 3000u, 1000u}) {
+    hsEnd(g, sc);
+    for (int i = 0; i < 3; i++) hsPress(g, {false, false, false, true});
+  }
+  hsEnd(g, 500);
+  bool skipped = !g.entering;
+  hsEnd(g, 4000);
+  int rank = g.entryRank;
+  for (int i = 0; i < 3; i++) hsPress(g, {false, false, false, true});
+  printf("  table:");
+  for (auto& e : g.hs) printf(" %s %u,", e.ini, e.score);
+  printf(" 500 skipped %d, 4000 ranked #%d\n", skipped, rank + 1);
+  CHECK(skipped && rank == 3, "ranking wrong");
+  CHECK(g.hs[0].score == 9000 && g.hs[1].score == 7000 && g.hs[2].score == 5000 && g.hs[3].score == 4000 &&
+        g.hs[4].score == 3000, "table not sorted or the lowest not dropped");
+  hsEnd(g, 8000);
+  for (int i = 0; i < 60 * 32; i++) hsFrame(g, {false, false, false, false});
+  printf("  idle player: entering %d, #2 is \"%s\" %u\n", g.entering, g.hs[1].ini, g.hs[1].score);
+  CHECK(!g.entering && g.hs[1].score == 8000 && !strcmp(g.hs[1].ini, "AAA"), "idle entry not kept");
+  CHECK(g.state == GAMEOVER, "left the game-over screen after entry");
+}
+
+// two balls meeting head-on raise one clack (not a burst), and the soak counts them
+static void testClack() {
+  printf("== ball-to-ball clack ==\n");
+  Game g;
+  g.startGame();
+  g.everLeftLane = true;
+  g.balls[0].p = {110, 250};
+  g.balls[0].v = {400, 0};
+  g.balls[1] = Ball{};
+  g.balls[1].live = true;
+  g.balls[1].p = {186, 250};
+  g.balls[1].v = {-400, 0};
+  int clacks = 0;
+  for (int f = 0; f < 18; f++) {
+    g.frame(1 / 60.f, {false, false, false, false});
+    g.ndirty = 0;
+    if (g.events & EV_BALL_HIT) clacks++;
+    g.events = 0;
+  }
+  printf("  head-on at 800 px/s: %d clack(s)\n", clacks);
+  CHECK(clacks == 1, "expected one clack, got %d", clacks);
+}
+
 int main() {
   HostCanvas cv;
   Game g;
@@ -615,6 +688,8 @@ int main() {
   testSaveOnce();
   testWatchdog();
   testPinnedBall();
+  testInitials();
+  testClack();
   testDemo();
   testDirtyConsistency();
   cv.save("table.ppm");

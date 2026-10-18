@@ -313,6 +313,15 @@ void handleEvents(uint32_t ev) {
   } else if (ev & EV_TARGET) {
     sfx(3, {{988, 70, W_SQUARE, 1480}});
     led(false, true, false, 120);
+  } else if (ev & EV_ENTRY) {
+    sfx(9, {{784, 70, W_PULSE}, {1047, 70, W_PULSE}, {1319, 70, W_PULSE}, {1568, 220, W_TRI}});
+  } else if (ev & EV_LETTER_OK) {
+    sfx(4, {{1319, 50, W_TRI}, {1760, 80, W_TRI}});
+  } else if (ev & EV_LETTER) {
+    sfx(3, {{988, 25, W_PULSE}});
+  } else if (ev & EV_BALL_HIT) {  // clack: a click, brighter for a hard hit
+    if (game.clackHard) sfx(2, {{4200, 8, W_NOISE}, {1500, 24, W_TRI, 900}});
+    else sfx(1, {{3600, 5, W_NOISE}, {1700, 12, W_TRI}});
   } else if (ev & EV_FLIP_HIT) {
     sfx(2, {{2800, 10, W_NOISE}, {190, 45, W_SQUARE, 90}});  // thwack
   } else if (ev & EV_BUMPER) {
@@ -330,6 +339,37 @@ void handleEvents(uint32_t ev) {
   } else if (ev & EV_FLIP) {
     sfx(0, {{140, 28, W_TRI, 70}});
   }
+}
+
+// one step of the volume (off, low, medium, high, off...), saved, with a sample
+void stepVolume() {
+  volume = (volume + 1) % board::VOLUME_LEVELS;
+  board::setVolume(volume);
+  prefs.putUChar("vol", volume);
+  static const char* names[] = {"SOUND OFF", "VOLUME LOW", "VOLUME MED", "VOLUME HIGH"};
+  game.notify(names[volume]);
+  sfx(9, {{1047, 70, W_TRI}, {1568, 120, W_TRI}});
+}
+
+// the high-score table lives in NVS as one blob; a board with only the old
+// single high score ("hi") starts its table from that
+void loadScores() {
+  if (prefs.getBytesLength("hs") == sizeof game.hs) {
+    prefs.getBytes("hs", game.hs, sizeof game.hs);
+  } else {
+    memset(game.hs, 0, sizeof game.hs);
+    uint32_t hi = prefs.getUInt("hi", 0);
+    if (hi) {
+      game.hs[0].score = hi;
+      memcpy(game.hs[0].ini, "---", pb::HS_LEN + 1);
+    }
+  }
+  game.syncHi();
+}
+void saveScores() {
+  prefs.putBytes("hs", game.hs, sizeof game.hs);
+  prefs.putUInt("hi", game.hiscore);
+  game.hsChanged = false;
 }
 
 // ---------------------------------------------------------------- idle
@@ -360,7 +400,7 @@ pb::Input readInput(bool* tapEdge) {
     lastN = n;
   }
   bool now = lastN > 0;
-  *tapEdge = now && !touching;
+  *tapEdge = false;  // touches tap on release, in loop()
   touching = now;
 
   pb::Input in{false, false, now};
@@ -380,6 +420,7 @@ pb::Input readInput(bool* tapEdge) {
   in.left |= bl;
   in.right |= br;
   in.touch |= bx;  // the launch button charges the plunger like a touch
+  in.launch = bx;
   lastInputMs = (n || bl || br || bx) ? millis() : lastInputMs;
   // pressing a flipper button counts as a tap: starts a game, leaves the
   // demo, takes over from the serial bot. (BOOT is handled in loop(): off the
@@ -427,7 +468,7 @@ void setup() {
   }
 
   prefs.begin("pinball", false);
-  game.hiscore = prefs.getUInt("hi", 0);
+  loadScores();
   volume = prefs.getUChar("vol", board::DEFAULT_VOLUME);
   board::setVolume(volume);
   lastInputMs = millis();
@@ -445,7 +486,7 @@ void loop() {
   static uint32_t fpsT = millis(), frames = 0;
 
   // serial debug: 'b' toggles the bot, 'm' starts multiball, 'p' screenshot,
-  // 'h<n>' sets the high score (e.g. "h0" clears it), 'o<n>' shows the
+  // 'h' prints the high-score table and 'h0' clears it, 'o<n>' shows the
   // game-over screen with score n (the saved high score is untouched),
   // 'v' prints the volume and 'v<0-3>' sets it (saved, with a sample)
   if (Serial.available()) {
@@ -462,10 +503,19 @@ void loop() {
     } else if (c == 'o') {
       game.debugGameOver((uint32_t)Serial.parseInt());
     } else if (c == 'h') {
-      game.hiscore = (uint32_t)Serial.parseInt();
-      prefs.putUInt("hi", game.hiscore);
-      game.markHud();
-      Serial.printf("[pinball] hi set to %u\n", game.hiscore);
+      // 'h' prints the high-score table, 'h0' clears it
+      uint32_t t0 = millis();
+      while (!Serial.available() && millis() - t0 < 50) delay(1);
+      if (Serial.available() && Serial.peek() == '0') {
+        Serial.read();
+        memset(game.hs, 0, sizeof game.hs);
+        game.syncHi();
+        saveScores();
+        game.markHud();
+        game.fullRedraw = true;
+      }
+      for (int i = 0; i < pb::HS_N; i++)
+        Serial.printf("[pinball] hs %d %s %u\n", i + 1, game.hs[i].ini, game.hs[i].score);
     } else if (c == 'v') {
       // a digit right after it sets the level; 'v' alone just reports it
       uint32_t t0 = millis();
@@ -536,19 +586,31 @@ void loop() {
     static bool bootPrev = false, bootLong = false;
     static uint32_t bootDown = 0;
     bool boot = board::btnLaunch();
-    bool offTable = game.state != pb::PLAY || game.demo;
+    bool offTable = (game.state != pb::PLAY || game.demo) && !game.entering;
     if (boot && !bootPrev) { bootDown = millis(); bootLong = false; }
     if (boot && offTable && !bootLong && millis() - bootDown > 800) {
       bootLong = true;
-      volume = (volume + 1) % board::VOLUME_LEVELS;
-      board::setVolume(volume);
-      prefs.putUChar("vol", volume);
-      static const char* names[] = {"SOUND OFF", "VOLUME LOW", "VOLUME MED", "VOLUME HIGH"};
-      game.notify(names[volume]);
-      sfx(9, {{1047, 70, W_TRI}, {1568, 120, W_TRI}});  // a sample at the new level
+      stepVolume();
     }
     if (!boot && bootPrev && offTable && !bootLong) tap = true;
     bootPrev = boot;
+  }
+
+  // ---- the screen off the table, the same way: a short touch is a tap (on
+  // release), one held 0.8 s steps the volume. On the table a touch is a
+  // flipper or the plunger, and while initials are entered it picks letters.
+  {
+    static bool scrPrev = false, scrLong = false;
+    static uint32_t scrDown = 0;
+    bool scr = touching && !swallow;
+    bool offTable = (game.state != pb::PLAY || game.demo) && !game.entering;
+    if (scr && !scrPrev) { scrDown = millis(); scrLong = false; }
+    if (scr && offTable && !scrLong && millis() - scrDown > 800) {
+      scrLong = true;
+      stepVolume();
+    }
+    if (!scr && scrPrev && offTable && !scrLong) tap = true;
+    scrPrev = scr;
   }
 
   if (botOn && tap) {
@@ -572,13 +634,12 @@ void loop() {
     Serial.printf("[pinball] demo %s\n", wasDemo ? "start" : "end");
   }
 
-  uint32_t hiBefore = game.hiscore;
   game.frame(dt, in);
   if (game.events) {
     handleEvents(game.events);
     game.events = 0;
   }
-  if (game.hiscore != hiBefore) prefs.putUInt("hi", game.hiscore);
+  if (game.hsChanged) saveScores();
 
   renderFrame();
   sfxUpdate();
