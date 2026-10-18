@@ -275,8 +275,9 @@ Four things to watch:
   Those two pins decide how the chip starts up, so I switch each lamp through a
   transistor, which keeps the pin low while the board boots.
 - **Don't solder onto an LED button's lamp tabs.** I burned out one button's
-  lamp doing exactly that; the soldering heat cooked the LED. The tabs take 2.8 mm spade connectors, so there's no
-  need to solder at the button at all, and a dead lamp becomes a plug-in swap.
+  lamp doing exactly that; the soldering heat cooked the LED. The tabs take
+  2.8 mm spade connectors, so there's no need to solder at the button at all,
+  and a dead lamp becomes a plug-in swap.
 
 ## The cabinet
 
