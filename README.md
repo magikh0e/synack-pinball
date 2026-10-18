@@ -22,6 +22,9 @@ one codebase:
 How it was made, from the physics to the printed cabinet:
 [the making of SYN/ACK](docs/MAKING-OF.md).
 
+The same physics also runs in the browser, in my pinball game
+[Hack the Planet](https://magikh0e.pl/pinball).
+
 ## Play
 
 | Touch | Does |
