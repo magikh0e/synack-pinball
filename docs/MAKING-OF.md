@@ -259,7 +259,7 @@ tabs come off the microswitch body, and the two lamp tabs off the LED holder
 behind it. Both buttons' tabs are 2.8 mm wide, so they take 2.8 mm (0.110")
 female spade connectors. Any colours work.*
 
-Three things to watch:
+Four things to watch:
 
 - **"1.25 mm" isn't one connector.** JST GH, MX1.25 and a few other families
   all use 1.25 mm pin spacing, and they don't mate with each other. The
@@ -274,6 +274,10 @@ Three things to watch:
 - My flipper buttons have 5 V LEDs, and the game lights them on IO45 and IO46.
   Those two pins decide how the chip starts up, so I switch each lamp through a
   transistor, which keeps the pin low while the board boots.
+- **Don't solder onto an LED button's lamp tabs.** I burned out one button's
+  lamp doing exactly that: the tabs run straight into the LED holder, and the
+  heat cooked the LED. The tabs take 2.8 mm spade connectors, so there's no
+  need to solder at the button at all, and a dead lamp becomes a plug-in swap.
 
 ## The cabinet
 
@@ -359,6 +363,8 @@ loose loop:
   every collision" also runs 600 times a second on a ball that's just rolling.
 - **Read the datasheet's fine print.** The 4-pixel rule and the 5 V pin were
   both written down. They just weren't where I looked first.
+- **Keep the iron off the LEDs.** Spade connectors on the button tabs would
+  have saved me a lamp.
 - **Name the connector family, not just the pitch.** "1.25 mm" fits three
   different plugs, and only one of them fits the board.
 - **Check how parts go in, not only where they end up.** A model can fit
