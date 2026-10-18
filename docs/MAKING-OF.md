@@ -127,8 +127,9 @@ down the orbit back into play. A ball fired straight up hit that wall from
 underneath and dropped back down the same outlane.
 
 Hack the Planet, a browser pinball game built on SYN/ACK's physics, had
-already found and fixed the same problem, and its fix carried straight back: start the ball in the middle of the outlane, and partway up hook it to
-the right, under the wall instead of into it. The hook is checked in every
+already found and fixed the same problem, and its fix carried straight back:
+start the ball in the middle of the outlane, and partway up hook it to the
+right, under the wall instead of into it. The hook is checked in every
 physics step, so a slow frame can't carry the ball past it:
 
 ```cpp
