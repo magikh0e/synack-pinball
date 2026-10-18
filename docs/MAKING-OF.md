@@ -69,6 +69,29 @@ I built the theme around the TCP handshake:
 When nobody is playing, a bot plays a silent demo game with a light show, and
 it never sets the high score.
 
+### High scores and initials
+
+<img src="guide/high-scores.png" alt="the title panel showing the HIGH SCORES table, with TAP TO START and hold for volume below it" width="240">
+
+A pinball machine isn't finished until it asks for your initials, so SYN/ACK
+keeps a top-five table. A score that makes the table brings up the classic
+three-letter entry on the game-over screen, worked with the flipper buttons:
+
+- a flipper steps the letter back or forward,
+- both flippers together (or the launch button) take it and move to the next,
+- and if you walk away, the initials are kept as they are after 30 seconds.
+
+The one subtle part was the timing. If a flipper stepped the letter the moment
+it went down, pressing both to confirm would first step the letter with
+whichever thumb landed first. So a flipper only steps the letter when it's let
+go, and only if the other flipper wasn't pressed in the meantime. On the CYD,
+the middle of the screen counts as both flippers, so it works by touch alone.
+
+Between games the title panel takes turns with the table, every six seconds.
+The table lives on the board as one small block of settings memory. When I
+added it, my existing high score carried over as the #1 entry, with "---"
+for initials.
+
 ## Physics: small steps and capsules
 
 The ball moves in fixed steps of 1/600 of a second, however fast the screen
