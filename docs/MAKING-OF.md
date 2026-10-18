@@ -348,6 +348,13 @@ loose loop:
   so I printed the card in green with black letters, and now it reads from
   across the room.
 
+### The inside
+
+<img src="guide/inside.jpg" alt="inside the cabinet body before the deck goes on: two arcade buttons on the side walls, one lit blue, wires soldered to their tabs, the USB-C extension coiled on the floor and the yellow launch button in the front wall" width="420">
+
+The inside. I ran out of spade connectors and flux partway through, so the
+buttons are soldered and it's a bit of a mess, but it works.
+
 ![both boards running the same game](both-boards.jpg)
 
 ## What it taught me
