@@ -114,6 +114,39 @@ if (vn < -60) {
 
 The roll down the inlane went from 2.6 seconds to 1.0, and a test now measures it.
 
+### The kickback that didn't kick
+
+The left outlane has a kickback: when it's lit, a ball falling down the
+outlane is fired back up into play. The soak runs counted hundreds of
+kickbacks firing, so it looked fine. But they counted the kick, not whether
+it saved anything.
+
+It didn't. The kickback fired the ball straight up, and right above the
+outlane sits the exit wall of the left orbit, angled to throw balls coming
+down the orbit back into play. A ball fired straight up hit that wall from
+underneath and dropped back down the same outlane.
+
+The bug turned up in Hack the Planet, a browser pinball game built on
+SYN/ACK's physics, where players noticed it first. The fix is the same in
+both: start the ball in the middle of the outlane, and partway up hook it to
+the right, under the wall instead of into it. The hook is checked in every
+physics step, so a slow frame can't carry the ball past it:
+
+```cpp
+if (b.kick) {  // checked every substep, so a slow frame can't skip it
+  if (b.v.y > 0) b.kick = false;  // fell back without reaching the hook
+  else if (b.p.y < KICK_HOOK_Y) {
+    b.kick = false;
+    b.v = {KICK_OUT_VX, fmaxf(b.v.y, -KICK_OUT_VY)};
+  }
+}
+```
+
+A test now drops a ball into the outlane from three positions and checks it
+comes back into play. All three failed before the fix. Together with three
+smaller fixes from the same round, the average ball life in a 600-ball bot run
+went from 32.6 to 37.2 seconds, and left-outlane drains fell from 140 to 89.
+
 ## Drawing fast
 
 Redrawing the whole 320 × 480 screen every frame is far too slow over SPI, so
@@ -292,6 +325,8 @@ back wall instead, and the cable then reaches the socket in one loose loop:
   found.
 - **Measure, then change one thing.** The outlanes, the ramp exit and the slow
   ball were all settled by numbers from bot runs, not by feel.
+- **Count outcomes, not triggers.** The kickback "fired" hundreds of times in
+  testing while saving almost nothing. A test of what happens next caught it.
 - **Per-contact effects must ignore resting contact.** Anything applied "on
   every collision" also runs 600 times a second on a ball that's just rolling.
 - **Read the datasheet's fine print.** The 4-pixel rule and the 5 V pin were
