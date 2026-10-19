@@ -36,10 +36,12 @@ LAUNCH_BTN=24 sh export.sh    # a third 24 mm arcade button for launch
 ```
 
 Rendering the model also prints its fit checks: the gap between the two facing
-flipper buttons, and the launch button's clearance. A change that makes the
+flipper buttons, the room their inside nuts have to turn above the floor, and
+the launch button's clearance. A change that makes the
 parts collide fails with an assertion instead of exporting. `PART="clash"`
-renders the USB-C plug and socket, the speaker and the marquee card (in place,
-and on their way in) against the printed parts, and it must come out empty
+renders the USB-C plug and socket, the speaker, the marquee card (in place,
+and on their way in) and the flipper buttons with their nuts against the
+printed parts and the board's underside, and it must come out empty
 ("Current top level object is empty").
 
 ## Hardware

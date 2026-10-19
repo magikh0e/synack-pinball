@@ -65,7 +65,11 @@ LAUNCH_X = W - 20; LAUNCH_Z = LAUNCH_BTN == 24 ? 15.5 : 15;
 // ~30 mm of body plus ~11 mm for push-on spade connectors.
 BTN_BEHIND = 30;   BTN_CONN = 11;   BTN_BEZEL = 27.6;
 FLIP_D = 24.4;     // arcade button hole
-FLIP_Y = LAUNCH_BTN == 24 ? 60 : 45;  FLIP_Z = 17;   // further back if the launch button is long
+FLIP_Y = LAUNCH_BTN == 24 ? 60 : 45;  // further back if the launch button is long
+// the flipper buttons' inside nut is wider than the bezel, and it has to turn
+// a full circle above the floor: at 17 mm it hit the floor and went on crooked
+BTN_NUT_D = 34;    BTN_NUT_T = 6;   // nut across its corners, and its thickness
+FLIP_Z = 26;   // the clash test finds the board from ~32 up
 INSERT_D = 4.0;  INSERT_L = 5;   // M3 heat-set insert hole
 DECK_SCREW_INSET = 6;
 
@@ -111,6 +115,9 @@ FLIP_GAP = (W - 2 * WALL) - 2 * (BTN_BEHIND + BTN_CONN);
 echo(str("flipper buttons: ", FLIP_GAP, " mm between the connectors (inside ", W - 2 * WALL, " mm)"));
 assert(FLIP_GAP >= 3, "flipper buttons would collide inside the cabinet");
 assert(FLIP_Z - BTN_BEZEL / 2 > 1, "button bezel hits the table");
+NUT_ROOM = FLIP_Z - BTN_NUT_D / 2 - FLOOR;
+echo(str("flipper button nuts: ", NUT_ROOM, " mm above the floor to turn"));
+assert(NUT_ROOM >= 3, "no room to turn the flipper buttons' nuts");
 // the launch button's body runs back from the front wall toward the flipper buttons
 LAUNCH_GAP = (FLIP_Y - 12) - (WALL + LAUNCH_BEHIND);
 echo(str("launch button: ", LAUNCH_GAP, " mm clear of the flipper buttons"));
@@ -304,6 +311,23 @@ module card_at(dz) {
   translate([W / 2 - CARD_W / 2, DECK_D + BB_WALL + 0.05 + CARD_T + 0.8, Z_REAR + SHELF_Z + 0.05 + dz]) rotate([90, 0, 0]) marquee();
 }
 
+// the flipper buttons inside the side walls: the body and connectors, and the
+// nut (a little clear of the wall, so the clash test doesn't count the face
+// it tightens against)
+module flipper_buttons() {
+  for (sx = [0, 1]) {
+    translate([sx ? W - WALL - 0.05 : WALL + 0.05, FLIP_Y, FLIP_Z]) rotate([0, sx ? -90 : 90, 0]) {
+      cylinder(d = 24, h = BTN_BEHIND + BTN_CONN);
+      cylinder(d = BTN_NUT_D, h = BTN_NUT_T, $fn = 6);
+    }
+  }
+}
+// the board from its PCB down through the parts on its back
+module board_envelope() {
+  deck_frame() translate([W / 2 - PCB_W / 2, BOARD_S0, -ABOVE_PCB - PCB_T - BELOW_PCB])
+    cube([PCB_W, PCB_L, PCB_T + BELOW_PCB]);
+}
+
 module board_dummy() {
   deck_frame() translate([W / 2 - PCB_W / 2, BOARD_S0, -ABOVE_PCB - PCB_T]) {
     color("darkgreen") cube([PCB_W, PCB_L, PCB_T]);
@@ -319,11 +343,13 @@ else if (PART == "deck")  // face down on the bed: smooth screen surround, stand
 else if (PART == "backbox")  // upside down, open bottom up: every wall rises straight from the bed
   translate([0, REAR_D, BB_H]) rotate([180, 0, 0]) translate([0, -DECK_D, -Z_REAR]) backbox();
 else if (PART == "marquee") marquee();
-else if (PART == "clash") {  // must be empty: plug, socket, speaker and card hit nothing printed
+else if (PART == "clash") {  // must be empty: plug, socket, speaker, card and buttons hit nothing
   intersection() {
-    union() { usbc_plug(); usbc_socket(); speaker_at(0, 0); card_at(0); }
+    union() { usbc_plug(); usbc_socket(); speaker_at(0, 0); card_at(0); flipper_buttons(); }
     union() { body(); deck(); backbox(); }
   }
+  // the flipper buttons and their nuts against the board's underside
+  intersection() { flipper_buttons(); board_envelope(); }
   // on their way in: the speaker straight up from the open bottom (before the
   // backbox goes on), the card down through the slot in the top
   intersection() {
