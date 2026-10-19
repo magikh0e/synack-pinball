@@ -28,6 +28,10 @@ pio run -e es3c35p-cabinet -t upload --upload-port COM6
 
 None of them need supports. 0.2 mm layers and 3 walls are plenty; PETG or PLA.
 
+`stl/SYN_ACK.3mf` is my Creality Print project for a K2 Plus (PETG, 0.2 mm
+layers) with all four parts laid out on plates, ready to slice. It's a copy
+of the STLs, so re-save it after any change to the model.
+
 Regenerate the STLs after changing `cabinet.scad` (OpenSCAD 2021.01+):
 
 ```
