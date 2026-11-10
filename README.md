@@ -1,3 +1,11 @@
+<p align="center">
+  <img src="assets/logo-512.png" width="220" height="220"
+       alt="A badge: a hot-pink neon pinball table with three lane lights,
+            two pop bumpers and a chrome ball in flight, ringed by
+            handshake arrows, a lightning bolt, a star and an arcade button,
+            in a riveted metal frame under SYN/ACK and Pinball banners.">
+</p>
+
 # SYN/ACK pinball
 
 [![build](https://github.com/magikh0e/synack-pinball/actions/workflows/build.yml/badge.svg)](https://github.com/magikh0e/synack-pinball/actions/workflows/build.yml)
